@@ -1,3 +1,7 @@
+[![Apache Sling](https://sling.apache.org/res/logos/sling.png)](https://sling.apache.org)
+
+&#32;[![Build Status](https://ci-builds.apache.org/job/Sling/job/modules/job/sling-org-apache-sling-auth-oauth-client/job/master/badge/icon)](https://ci-builds.apache.org/job/Sling/job/modules/job/sling-org-apache-sling-auth-oauth-client/job/master/)&#32;[![auth](https://sling.apache.org/badges/group-auth.svg)](https://github.com/apache/sling-aggregator/blob/master/docs/groups/auth.md) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
+
 # Apache Sling OAuth 2.0 client with OIDC support
 
 > [!IMPORTANT]
