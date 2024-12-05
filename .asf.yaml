@@ -1,0 +1,19 @@
+github:
+  description: "Apache Sling OAuth client"
+  labels:
+  - "sling"
+  - "java"
+  - "oauth"
+  - "oidc"
+  autolink_jira:
+  - "SLING"
+  - "OAK"
+  - "JCR"
+  - "JCRVLT"
+  - "INFRA"
+  - "FELIX"
+  - "MNG"
+notifications:
+  jira_options: "link"
+  pullrequests_bot_sonarcloud: "commits@sling.apache.org"
+
