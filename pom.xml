@@ -36,6 +36,7 @@
         <sling.java.version>17</sling.java.version>
         <project.build.outputTimestamp>1</project.build.outputTimestamp>
         <bnd.baseline.skip>true</bnd.baseline.skip>
+        <it.startTimeoutSeconds>60</it.startTimeoutSeconds>
 	</properties>
 
 	<build>
@@ -222,6 +223,7 @@
                             <environmentVariables>
                                 <IT_ENCRYPTION_PASSWORD>random</IT_ENCRYPTION_PASSWORD>
                             </environmentVariables>
+                            <startTimeoutSeconds>${it.startTimeoutSeconds}</startTimeoutSeconds>
                         </launch>
                     </launches>
                 </configuration>
