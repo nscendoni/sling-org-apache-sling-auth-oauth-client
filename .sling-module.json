@@ -3,7 +3,7 @@
         "jdks": [
           17,
           21
-        ]
-    },
-    "additionalMavenParams": "-Dit.startTimeoutSeconds=120"
+        ],
+        "additionalMavenParams": "-Dit.startTimeoutSeconds=120"
+    }
 }
