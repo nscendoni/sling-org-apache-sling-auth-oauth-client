@@ -4,5 +4,6 @@
           17,
           21
         ]
-    }
+    },
+    "additionalMavenParams": "-Dit.startTimeoutSeconds=120"
 }
