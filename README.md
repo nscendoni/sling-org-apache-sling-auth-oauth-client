@@ -202,6 +202,7 @@ Validated providers:
 - GitHub, OAuth 2.0, with authorizationEndpoint https://github.com/login/oauth/authorize and tokenEndpoint https://github.com/login/oauth/access_token
 - KeyCloak ( see [#keycloak] )
 - Microsoft, OIDC, with base URL of https://login.microsoftonline.com/$TENANT\_ID/v2.0. see [Microsoft OIDC documentation](https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-protocols-oidc)
+- Adobe IMS, OAuth 2.0, with authorizationEndpoint https://ims-na1.adobelogin.com/ims/authorize/v3 and tokenEndpoint https://ims-na1.adobelogin.com/ims/token/v1
 
 ### Deployment
 
