@@ -6,7 +6,7 @@
 
 > [!IMPORTANT]
 > The Java APIs exported by this bundle are considered **experimental** and are marked as being
-> @ProviderType. Expect them to change frequently until they are considered stable.
+> @ProviderType. The APIs may change in an incompatible way in future minor releases.
 
 This bundle adds support for Sling-based applications to function as an OAuth 2.0 client 
 ([RFC 6749](https://datatracker.ietf.org/doc/html/rfc6749)) and implements the basis for being an 
