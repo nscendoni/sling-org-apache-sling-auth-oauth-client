@@ -18,8 +18,19 @@ package org.apache.sling.auth.oauth_client;
 
 /**
  * Identifies an OAuth or OIDC connection
+ * 
+ * <p>Used in the public API to identify the client connection for which to retrieve or clear tokens.</p>
+ * 
+ * <p>Connections are published as OSGi services and should be retrieved using the <code>name</code> property.</p>
+ * 
+ * <pre>{@code private @Reference(target = "(name=my-connection-name)")} ClientConnection connection;}</pre>
+ * 
+ * @see OAuthTokenAccess
  */
 public interface ClientConnection {
 
+    /**
+     * @return the name of the connection
+     */
     String name();
 }
