@@ -34,7 +34,7 @@ class OAuthUrisTest {
     
     @Test
     void testRedirectUri() {
-        URI redirectUri = OAuthUris.getOidcEntryPointUri(MockOidcConnection.DEFAULT_CONNECTION, context.request(), "/foo");
+        URI redirectUri = OAuthUris.getOAuthEntryPointUri(MockOidcConnection.DEFAULT_CONNECTION, context.request(), "/foo");
         
         assertThat(redirectUri).as("redirect uri")
             .hasScheme("http")    
@@ -47,7 +47,7 @@ class OAuthUrisTest {
     @Test
     void testRedirectUri_customPort_noRedirect() {
         context.request().setServerPort(8080);
-        URI redirectUri = OAuthUris.getOidcEntryPointUri(MockOidcConnection.DEFAULT_CONNECTION, context.request(), null);
+        URI redirectUri = OAuthUris.getOAuthEntryPointUri(MockOidcConnection.DEFAULT_CONNECTION, context.request(), null);
         
         assertThat(redirectUri).as("redirect uri")
             .hasScheme("http")    
