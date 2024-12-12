@@ -26,16 +26,16 @@ import org.apache.sling.auth.oauth_client.ClientConnection;
 public abstract class OAuthUris {
 
     /**
-     * Generates a local URI to the OIDC entry point servlet
+     * Generates a local URI to the Sling OAuth entry point servlet
      * 
-     * <p>The URI can be used as-is to send a redirect to the user and start the OIDC flow.</p>
+     * <p>The URI can be used as-is to send a redirect to the user and start the OAuth flow.</p>
      * 
-     * @param connection The connection to start the OIDC flow for
+     * @param connection The connection to start the OAuth flow for
      * @param request The current request
-     * @param redirectPath The local redirect path to use after completing the OIDC flow
+     * @param redirectPath The local redirect path to use after completing the OAuth flow
      * @return a local URI
      */
-    public static URI getOidcEntryPointUri(ClientConnection connection, SlingHttpServletRequest request, String redirectPath) {
+    public static URI getOAuthEntryPointUri(ClientConnection connection, SlingHttpServletRequest request, String redirectPath) {
         StringBuilder uri = new StringBuilder();
         uri.append(request.getScheme()).append("://").append(request.getServerName());
         boolean needsExplicitPort = ( "https".equals(request.getScheme()) && request.getServerPort() != 443 )
