@@ -27,14 +27,14 @@
     </parent>
 
 	<artifactId>org.apache.sling.auth.oauth-client</artifactId>
-	<version>0.1.0</version>
+	<version>0.1.1-SNAPSHOT</version>
 
 	<name>Apache Sling OAuth Client</name>
 	<description>Apache Sling OAuth 2.0 client with OIDC support</description>
 
     <properties>
         <sling.java.version>17</sling.java.version>
-        <project.build.outputTimestamp>1734706847</project.build.outputTimestamp>
+        <project.build.outputTimestamp>1734706953</project.build.outputTimestamp>
         <bnd.baseline.skip>true</bnd.baseline.skip>
         <it.startTimeoutSeconds>60</it.startTimeoutSeconds>
 	</properties>
