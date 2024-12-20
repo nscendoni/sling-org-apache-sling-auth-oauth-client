@@ -362,7 +362,6 @@ $ docker run --rm --volume (pwd)/keycloak-data:/opt/keycloak/data -p 8081:8080 -
 
 ### Future plans
 
-- make the OAuthEnabledSlingServlet handle any method, not just get
 - explore an AuthenticationHandler that can optionally expose the access tokens
 - investigate PKCE (RFC 7636)
 - investigate encrypted client-side storage of tokens
