@@ -27,9 +27,9 @@
     </parent>
 
 	<artifactId>org.apache.sling.auth.oauth-client</artifactId>
-	<version>0.1-SNAPSHOT</version>
+	<version>0.1.0-SNAPSHOT</version>
 
-	<name>Apache Sling OAuth client</name>
+	<name>Apache Sling OAuth Client</name>
 	<description>Apache Sling OAuth 2.0 client with OIDC support</description>
 
     <properties>
