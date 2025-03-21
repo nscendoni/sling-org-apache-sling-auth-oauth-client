@@ -20,6 +20,8 @@ import static org.osgi.service.component.annotations.ConfigurationPolicy.REQUIRE
 
 import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.auth.oauth_client.ClientConnection;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.metatype.annotations.AttributeDefinition;
@@ -47,7 +49,7 @@ public class RedisOAuthTokenStore implements OAuthTokenStore {
     private final JedisPool pool;
     
     @Activate
-    public RedisOAuthTokenStore(Config cfg) {
+    public RedisOAuthTokenStore(@NotNull Config cfg) {
         pool = new JedisPool(cfg.redisUrl());
     }
     
@@ -56,7 +58,7 @@ public class RedisOAuthTokenStore implements OAuthTokenStore {
     }
 
     @Override
-    public OAuthToken getAccessToken(ClientConnection connection, ResourceResolver resolver) throws OAuthException {
+    public @NotNull OAuthToken getAccessToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) throws OAuthException {
         String userId = resolver.getUserID();
         
         try ( Jedis jedis = pool.getResource()) {
@@ -75,7 +77,7 @@ public class RedisOAuthTokenStore implements OAuthTokenStore {
     }
 
     @Override
-    public OAuthToken getRefreshToken(ClientConnection connection, ResourceResolver resolver) throws OAuthException {
+    public @NotNull OAuthToken getRefreshToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) throws OAuthException {
         String userId = resolver.getUserID();
         
         try (Jedis jedis = pool.getResource()) {
@@ -89,7 +91,7 @@ public class RedisOAuthTokenStore implements OAuthTokenStore {
     }
 
     @Override
-    public void persistTokens(ClientConnection connection, ResourceResolver resolver, OAuthTokens tokens)
+    public void persistTokens(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver, @NotNull OAuthTokens tokens)
             throws OAuthException {
         String userId = resolver.getUserID();
 
@@ -101,7 +103,7 @@ public class RedisOAuthTokenStore implements OAuthTokenStore {
     }
     
     @Override
-    public void clearAccessToken(ClientConnection connection, ResourceResolver resolver) throws OAuthException {
+    public void clearAccessToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) throws OAuthException {
     	   String userId = resolver.getUserID();
 
            try (Jedis jedis = pool.getResource()) {
@@ -110,13 +112,13 @@ public class RedisOAuthTokenStore implements OAuthTokenStore {
     	
     }
     
-    private void setWithExpiry(Jedis jedis, String key, String value, long expiry) {
+    private static void setWithExpiry(@NotNull Jedis jedis, @NotNull String key, @Nullable String value, long expiry) {
         jedis.set(key, value);
         if ( expiry > 0 )
             jedis.expire(key, expiry);
     }
     
-    private String keyFor(String principal, ClientConnection connection, String tokenType) {
+    private static String keyFor(@Nullable String principal, @NotNull ClientConnection connection, @Nullable String tokenType) {
         return KEY_PREFIX + "." + principal + "." + connection.name() + "." + tokenType;
     }
 }
