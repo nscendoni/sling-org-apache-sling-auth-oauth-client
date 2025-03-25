@@ -20,10 +20,11 @@ import com.nimbusds.oauth2.sdk.token.BearerAccessToken;
 import com.nimbusds.oauth2.sdk.token.RefreshToken;
 import com.nimbusds.oauth2.sdk.token.Tokens;
 import com.nimbusds.openid.connect.sdk.token.OIDCTokens;
+import org.jetbrains.annotations.NotNull;
 
 public class Converter {
 
-    public static OIDCTokens toNimbusOidcTokens(OidcTokens tokens) {
+    public static @NotNull OIDCTokens toNimbusOidcTokens(@NotNull OidcTokens tokens) {
         OIDCTokens nimbusTokens;
         RefreshToken nimbusRefreshToken = tokens.refreshToken() != null ? new RefreshToken(tokens.refreshToken()) : null;
         BearerAccessToken nimbusAccessToken = new BearerAccessToken(tokens.accessToken(), tokens.expiresAt(), null);
@@ -36,7 +37,7 @@ public class Converter {
         return nimbusTokens;
     }
     
-    public static OidcTokens toApiOidcTokens(OIDCTokens nimbusTokens) {
+    public static @NotNull OidcTokens toApiOidcTokens(@NotNull OIDCTokens nimbusTokens) {
         String accessToken = nimbusTokens.getAccessToken() != null ? nimbusTokens.getAccessToken().getValue() : null;
         long expiresAt = nimbusTokens.getAccessToken() != null ? nimbusTokens.getAccessToken().getLifetime() : 0;
         String refreshToken = nimbusTokens.getRefreshToken() != null ? nimbusTokens.getRefreshToken().getValue() : null;
@@ -45,15 +46,15 @@ public class Converter {
         return new OidcTokens(accessToken, expiresAt, refreshToken, idToken);
     }
     
-    public static OAuthTokens toSlingOAuthTokens(OIDCTokens nimbusTokens) {
+    public static @NotNull OAuthTokens toSlingOAuthTokens(@NotNull OIDCTokens nimbusTokens) {
         String accessToken = nimbusTokens.getAccessToken() != null ? nimbusTokens.getAccessToken().getValue() : null;
         long expiresAt = nimbusTokens.getAccessToken() != null ? nimbusTokens.getAccessToken().getLifetime() : 0;
         String refreshToken = nimbusTokens.getRefreshToken() != null ? nimbusTokens.getRefreshToken().getValue() : null;
         
-        return new OAuthTokens(accessToken, expiresAt, refreshToken);        
+        return new OAuthTokens(accessToken, expiresAt, refreshToken);    
     }
     
-    public static OAuthTokens toSlingOAuthTokens(Tokens oAuthTokens) {
+    public static @NotNull OAuthTokens toSlingOAuthTokens(@NotNull Tokens oAuthTokens) {
         String accessToken = oAuthTokens.getAccessToken() != null ? oAuthTokens.getAccessToken().getValue() : null;
         long expiresAt = oAuthTokens.getAccessToken() != null ? oAuthTokens.getAccessToken().getLifetime() : 0;
         String refreshToken = oAuthTokens.getRefreshToken() != null ? oAuthTokens.getRefreshToken().getValue() : null;

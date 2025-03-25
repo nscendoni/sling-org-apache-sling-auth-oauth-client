@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.net.URI;
 
 import org.apache.sling.auth.oauth_client.ClientConnection;
+import org.jetbrains.annotations.NotNull;
 import org.osgi.service.component.annotations.Component;
 
 import com.nimbusds.oauth2.sdk.AccessTokenResponse;
@@ -39,11 +40,11 @@ import com.nimbusds.oauth2.sdk.token.Tokens;
 public class OAuthTokenRefresherImpl implements OAuthTokenRefresher {
 
     @Override
-    public OAuthTokens refreshTokens(ClientConnection connection, String refreshToken2) {
+    public @NotNull OAuthTokens refreshTokens(@NotNull ClientConnection connection, @NotNull String refreshToken2) {
         return Converter.toSlingOAuthTokens(refreshTokensInternal(connection, refreshToken2));
     }
     
-    public Tokens refreshTokensInternal(ClientConnection connection, String refreshToken2) {
+    public @NotNull Tokens refreshTokensInternal(@NotNull ClientConnection connection, @NotNull String refreshToken2) {
 
          try {
             // Construct the grant from the saved refresh token

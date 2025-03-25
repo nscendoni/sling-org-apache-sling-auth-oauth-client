@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 
 import org.apache.sling.api.SlingHttpServletRequest;
 import org.apache.sling.auth.oauth_client.ClientConnection;
+import org.jetbrains.annotations.NotNull;
 
 public abstract class OAuthUris {
 
@@ -35,7 +36,7 @@ public abstract class OAuthUris {
      * @param redirectPath The local redirect path to use after completing the OAuth flow
      * @return a local URI
      */
-    public static URI getOAuthEntryPointUri(ClientConnection connection, SlingHttpServletRequest request, String redirectPath) {
+    public static @NotNull URI getOAuthEntryPointUri(@NotNull ClientConnection connection, @NotNull SlingHttpServletRequest request, @NotNull String redirectPath) {
         StringBuilder uri = new StringBuilder();
         uri.append(request.getScheme()).append("://").append(request.getServerName());
         boolean needsExplicitPort = ( "https".equals(request.getScheme()) && request.getServerPort() != 443 )
@@ -45,8 +46,7 @@ public abstract class OAuthUris {
             uri.append(':').append(request.getServerPort());
         }
         uri.append(OAuthEntryPointServlet.PATH).append("?c=").append(connection.name());
-        if ( redirectPath != null )
-            uri.append("&redirect=").append(URLEncoder.encode(redirectPath, StandardCharsets.UTF_8));
+        uri.append("&redirect=").append(URLEncoder.encode(redirectPath, StandardCharsets.UTF_8));
 
         return URI.create(uri.toString());
     }

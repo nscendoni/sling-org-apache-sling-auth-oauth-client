@@ -44,17 +44,4 @@ class OAuthUrisTest {
             .hasQuery("c=mock-oidc&redirect=/foo");
     }
 
-    @Test
-    void testRedirectUri_customPort_noRedirect() {
-        context.request().setServerPort(8080);
-        URI redirectUri = OAuthUris.getOAuthEntryPointUri(MockOidcConnection.DEFAULT_CONNECTION, context.request(), null);
-        
-        assertThat(redirectUri).as("redirect uri")
-            .hasScheme("http")    
-            .hasHost("localhost")
-            .hasPort(8080)
-            .hasPath("/system/sling/oauth/entry-point")
-            .hasQuery("c=mock-oidc");
-    }
-
 }

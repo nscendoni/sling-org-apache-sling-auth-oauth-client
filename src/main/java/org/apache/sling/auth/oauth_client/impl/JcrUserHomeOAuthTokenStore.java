@@ -30,6 +30,7 @@ import javax.jcr.Value;
 import org.apache.jackrabbit.api.security.user.User;
 import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.auth.oauth_client.ClientConnection;
+import org.jetbrains.annotations.NotNull;
 import org.apache.sling.commons.crypto.CryptoService;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
@@ -55,7 +56,7 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
     }
 
     @Override
-    public OAuthToken getAccessToken(ClientConnection connection, ResourceResolver resolver) {
+    public @NotNull OAuthToken getAccessToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) {
         try {
             User user = resolver.adaptTo(User.class);
 
@@ -76,7 +77,7 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
         }
     }
 
-    private OAuthToken getToken(ClientConnection connection, User user, String propertyName) throws RepositoryException {
+    private @NotNull OAuthToken getToken(@NotNull ClientConnection connection, @NotNull User user, @NotNull String propertyName) throws RepositoryException {
 
         Value[] tokenValue = user.getProperty(propertyPath(connection, propertyName));
         if ( tokenValue == null )
@@ -91,7 +92,7 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
     }
     
     @Override
-    public OAuthToken getRefreshToken(ClientConnection connection, ResourceResolver resolver) {
+    public @NotNull OAuthToken getRefreshToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) {
         try {
             User user = resolver.adaptTo(User.class);
             
@@ -102,7 +103,7 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
     }
     
     @Override
-    public void persistTokens(ClientConnection connection, ResourceResolver resolver, OAuthTokens tokens) {
+    public void persistTokens(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver, @NotNull OAuthTokens tokens) {
         try {
             User currentUser = resolver.adaptTo(User.class);
             Session session = resolver.adaptTo(Session.class);
@@ -139,16 +140,16 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
         return session.getValueFactory().createValue(encryptedValue);
     }
 
-    private String propertyPath(ClientConnection connection, String propertyName) {
+    private @NotNull String propertyPath(@NotNull ClientConnection connection, @NotNull String propertyName) {
         return nodePath(connection) + "/" + propertyName;
     }
 
-    private String nodePath(ClientConnection connection) {
+    private @NotNull String nodePath(@NotNull ClientConnection connection) {
         return "oauth-tokens/" + connection.name();
     }
     
     @Override
-    public void clearAccessToken(ClientConnection connection, ResourceResolver resolver) throws OAuthException {
+    public void clearAccessToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) throws OAuthException {
         try {
             User currentUser = resolver.adaptTo(User.class);
             Session session = resolver.adaptTo(Session.class);
