@@ -29,14 +29,19 @@ import org.slf4j.LoggerFactory;
 
 import com.nimbusds.oauth2.sdk.id.State;
 
-@Component
+@Component(
+        service = OAuthStateManager.class,
+        property = {
+                "service.ranking:Integer=10"
+        }
+)
 public class CryptoOAuthStateManager implements OAuthStateManager {
 
     private static final Logger logger = LoggerFactory.getLogger(CryptoOAuthStateManager.class);
     private final CryptoService cryptoService;
 
     @Activate
-    public CryptoOAuthStateManager(@Reference(target = "(names=sling-oauth)") CryptoService cryptoService) {
+    public CryptoOAuthStateManager(@Reference CryptoService cryptoService) {
         this.cryptoService = cryptoService;
     }
     

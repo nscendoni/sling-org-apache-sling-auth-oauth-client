@@ -28,7 +28,6 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletResponse;
 
 import org.apache.sling.auth.oauth_client.ClientConnection;
-import org.apache.sling.auth.oauth_client.impl.OAuthEntryPointServlet;
 import org.apache.sling.testing.mock.sling.junit5.SlingContext;
 import org.apache.sling.testing.mock.sling.junit5.SlingContextExtension;
 import org.apache.sling.testing.mock.sling.servlet.MockSlingHttpServletResponse;
@@ -42,12 +41,11 @@ class OAuthEntryPointServletTest {
     private static final String MOCK_OIDC_PARAM = "mock-oidc-param";
     
     private final SlingContext context = new SlingContext();
-    private List<ClientConnection> connections;
     private OAuthEntryPointServlet servlet;
     
     @BeforeEach
     void initServlet() {
-        connections = Arrays.asList(
+        List<ClientConnection> connections = Arrays.asList(
                 MockOidcConnection.DEFAULT_CONNECTION,
                 new MockOidcConnection(new String[] {"openid"}, MOCK_OIDC_PARAM, "client-id", "client-secret", "http://example.com", new String[] { "access_type=offline" } )
             );

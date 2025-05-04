@@ -26,12 +26,14 @@ import javax.jcr.PropertyType;
 import javax.jcr.RepositoryException;
 import javax.jcr.Session;
 import javax.jcr.Value;
+import javax.jcr.ValueFactory;
 
 import org.apache.jackrabbit.api.security.user.User;
 import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.jetbrains.annotations.NotNull;
 import org.apache.sling.commons.crypto.CryptoService;
+import org.jetbrains.annotations.Nullable;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
@@ -41,29 +43,27 @@ import org.slf4j.LoggerFactory;
 // a config class is intentionally not defined, but a config is required to select an implementation
 @Component(configurationPolicy = REQUIRE)
 public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
-
+    
     private static final String PROPERTY_NAME_EXPIRES_AT = "expires_at";
-    private static final String PROPERTY_NAME_ACCESS_TOKEN = "access_token";
     private static final String PROPERTY_NAME_REFRESH_TOKEN = "refresh_token";
 
-    private final Logger logger = LoggerFactory.getLogger(getClass());
+    private static final Logger logger = LoggerFactory.getLogger(JcrUserHomeOAuthTokenStore.class);
     
-    private CryptoService cryptoService;
+    private final CryptoService cryptoService;
     
     @Activate
-    public JcrUserHomeOAuthTokenStore(@Reference(target = "(names=sling-oauth)") CryptoService cryptoService) {
+    public JcrUserHomeOAuthTokenStore(@Reference CryptoService cryptoService) {
         this.cryptoService = cryptoService;
     }
 
     @Override
     public @NotNull OAuthToken getAccessToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) {
         try {
-            User user = resolver.adaptTo(User.class);
-
+            User user = adaptToUser(resolver);
             Value[] expiresAt = user.getProperty(propertyPath(connection, PROPERTY_NAME_EXPIRES_AT));
-            if ( expiresAt != null  && expiresAt.length == 1 && expiresAt[0].getType() == PropertyType.DATE ) {
+            if (expiresAt != null && expiresAt.length == 1 && expiresAt[0].getType() == PropertyType.DATE) {
                 Calendar expiresCal = expiresAt[0].getDate();
-                if ( expiresCal.before(Calendar.getInstance())) {
+                if (expiresCal.before(Calendar.getInstance())) {
                     logger.info("Token for {} expired at {}, marking as expired", connection.name(), expiresCal);
 
                     // refresh token is present, mark as expired
@@ -94,8 +94,7 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
     @Override
     public @NotNull OAuthToken getRefreshToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) {
         try {
-            User user = resolver.adaptTo(User.class);
-            
+            User user = adaptToUser(resolver);
             return getToken(connection, user, PROPERTY_NAME_REFRESH_TOKEN);
         } catch (RepositoryException e) {
             throw new OAuthException(e);
@@ -105,61 +104,82 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
     @Override
     public void persistTokens(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver, @NotNull OAuthTokens tokens) {
         try {
-            User currentUser = resolver.adaptTo(User.class);
-            Session session = resolver.adaptTo(Session.class);
+            User user = adaptToUser(resolver);
+            Session session = adaptToSession(resolver);
+            ValueFactory vf = session.getValueFactory();
 
+            setTokenProperty(user, vf, propertyPath(connection, PROPERTY_NAME_ACCESS_TOKEN), tokens.accessToken());
+            setTokenProperty(user, vf, propertyPath(connection, PROPERTY_NAME_REFRESH_TOKEN), tokens.refreshToken());
+            
             ZonedDateTime expiry = null;
             long expiresAt = tokens.expiresAt();
-            if ( expiresAt > 0 ) {
+            if (expiresAt > 0) {
                 expiry = ZonedDateTime.now().plusSeconds(expiresAt);
             }
-
-            currentUser.setProperty(propertyPath(connection, PROPERTY_NAME_ACCESS_TOKEN), createTokenValue(session, tokens.accessToken()));
-            if ( expiry != null ) {
+            if (expiry != null) {
                 Calendar cal = GregorianCalendar.from(expiry);
-                currentUser.setProperty(propertyPath(connection, PROPERTY_NAME_EXPIRES_AT), session.getValueFactory().createValue(cal));
-            } else
-                currentUser.removeProperty(propertyPath(connection, PROPERTY_NAME_EXPIRES_AT));
-
-            if ( tokens.refreshToken() != null ) {
-                String refreshToken = tokens.refreshToken();
-                if ( refreshToken != null ) {
-                    currentUser.setProperty(propertyPath(connection, PROPERTY_NAME_REFRESH_TOKEN), createTokenValue(session, refreshToken));
-                } else
-                    currentUser.removeProperty(propertyPath(connection, PROPERTY_NAME_REFRESH_TOKEN));
+                user.setProperty(propertyPath(connection, PROPERTY_NAME_EXPIRES_AT), vf.createValue(cal));
+            } else {
+                user.removeProperty(propertyPath(connection, PROPERTY_NAME_EXPIRES_AT));
             }
 
             session.save();
         } catch (RepositoryException e) {
             throw new OAuthException(e);
         }
-    }
-    
-    private Value createTokenValue(Session session, String propertyValue) throws RepositoryException {
-        String encryptedValue = cryptoService.encrypt(propertyValue);
-        return session.getValueFactory().createValue(encryptedValue);
-    }
-
-    private @NotNull String propertyPath(@NotNull ClientConnection connection, @NotNull String propertyName) {
-        return nodePath(connection) + "/" + propertyName;
-    }
-
-    private @NotNull String nodePath(@NotNull ClientConnection connection) {
-        return "oauth-tokens/" + connection.name();
     }
     
     @Override
     public void clearAccessToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) throws OAuthException {
         try {
-            User currentUser = resolver.adaptTo(User.class);
-            Session session = resolver.adaptTo(Session.class);
-            
+            User currentUser = adaptToUser(resolver);
+
             currentUser.removeProperty(propertyPath(connection, PROPERTY_NAME_ACCESS_TOKEN));
             currentUser.removeProperty(propertyPath(connection, PROPERTY_NAME_EXPIRES_AT));
+            // TODO: need to remove refresh token as well?
 
-            session.save();
+            adaptToSession(resolver).save();
         } catch (RepositoryException e) {
             throw new OAuthException(e);
         }
+    }
+    
+    private void setTokenProperty(@NotNull User user, @NotNull ValueFactory valueFactory, @NotNull String propertyPath, @Nullable String value) throws RepositoryException {
+        if (value != null) {
+            user.setProperty(propertyPath, createTokenValue(valueFactory, value));
+        } else {
+            // TODO: verify if removing the property is the intended behavior in case of null accessToken
+            logger.info("Token value is null, removing property {}", propertyPath);
+            user.removeProperty(propertyPath);
+        }
+    }
+    
+    private @NotNull Value createTokenValue(@NotNull ValueFactory valueFactory, @NotNull String propertyValue) {
+        String encryptedValue = cryptoService.encrypt(propertyValue);
+        return valueFactory.createValue(encryptedValue);
+    }
+
+    private static @NotNull String propertyPath(@NotNull ClientConnection connection, @NotNull String propertyName) {
+        return nodePath(connection) + "/" + propertyName;
+    }
+
+    private static @NotNull String nodePath(@NotNull ClientConnection connection) {
+        return "oauth-tokens/" + connection.name();
+    }
+    
+    private static @NotNull User adaptToUser(@NotNull ResourceResolver resolver) {
+        User user = resolver.adaptTo(User.class);
+        if (user == null) {
+            throw new OAuthException("Unable to adapt resolver to a user.");
+        }
+        return user;
+    }
+
+    private static @NotNull Session adaptToSession(@NotNull ResourceResolver resolver) {
+        Session session = resolver.adaptTo(Session.class);
+        if (session == null) {
+            throw new OAuthException("Unable to adapt resolver to a session.");
+        }
+        return session;
     }
 }

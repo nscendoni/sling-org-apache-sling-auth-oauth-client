@@ -16,16 +16,11 @@
  */
 package org.apache.sling.auth.oauth_client.impl;
 
-public class OAuthException extends RuntimeException {
+import org.jetbrains.annotations.NotNull;
 
-    private static final long serialVersionUID = 1L;
+import javax.servlet.http.Cookie;
+import java.net.URI;
 
-    public OAuthException(String message) {
-        super(message);
-    }
-
-    public OAuthException(Throwable cause) {
-        super(cause);
-    }
-
+record RedirectTarget(@NotNull URI uri, @NotNull Cookie cookie) {
+    
 }

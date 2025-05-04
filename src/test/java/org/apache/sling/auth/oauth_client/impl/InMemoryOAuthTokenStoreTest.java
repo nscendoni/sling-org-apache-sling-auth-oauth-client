@@ -19,6 +19,7 @@ package org.apache.sling.auth.oauth_client.impl;
 import org.apache.sling.auth.oauth_client.InMemoryOAuthTokenStore;
 import org.apache.sling.testing.mock.sling.ResourceResolverType;
 import org.apache.sling.testing.mock.sling.junit5.SlingContext;
+import org.jetbrains.annotations.NotNull;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
@@ -30,6 +31,7 @@ public class InMemoryOAuthTokenStoreTest extends TokenStoreTestSupport<InMemoryO
     }
 
     @Override
+    @NotNull
     InMemoryOAuthTokenStore createTokenStore() {
         return new InMemoryOAuthTokenStore();
     }

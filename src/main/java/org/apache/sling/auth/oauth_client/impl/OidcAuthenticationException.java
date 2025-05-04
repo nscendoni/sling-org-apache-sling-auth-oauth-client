@@ -16,16 +16,11 @@
  */
 package org.apache.sling.auth.oauth_client.impl;
 
-public class OAuthException extends RuntimeException {
-
-    private static final long serialVersionUID = 1L;
-
-    public OAuthException(String message) {
-        super(message);
+class OidcAuthenticationException extends Exception {
+    OidcAuthenticationException(String s, Exception e) {
+        super(s, e);
     }
-
-    public OAuthException(Throwable cause) {
-        super(cause);
+    OidcAuthenticationException(String s) {
+        super(s);
     }
-
 }

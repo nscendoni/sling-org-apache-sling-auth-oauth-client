@@ -44,7 +44,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 @ExtendWith(SlingContextExtension.class)
 class OAuthEnabledSlingServletTest {
 
-    private SlingContext context = new SlingContext();
+    private final SlingContext context = new SlingContext();
     private TokenAccessImpl tokenAccess;
     private InMemoryOAuthTokenStore tokenStore;
     
@@ -53,7 +53,7 @@ class OAuthEnabledSlingServletTest {
         tokenStore = (InMemoryOAuthTokenStore) context.registerService(OAuthTokenStore.class, new InMemoryOAuthTokenStore());
         context.registerService(OAuthTokenRefresher.class, new OAuthTokenRefresher() {
             @Override
-            public OAuthTokens refreshTokens(ClientConnection connection, String refreshToken) throws OAuthException {
+            public @NotNull OAuthTokens refreshTokens(@NotNull ClientConnection connection, @NotNull String refreshToken) throws OAuthException {
                 throw new UnsupportedOperationException("Not yet implemented");
             }
         });

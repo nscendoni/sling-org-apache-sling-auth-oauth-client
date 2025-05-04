@@ -25,6 +25,7 @@ import org.osgi.service.metatype.annotations.AttributeDefinition;
 import org.osgi.service.metatype.annotations.AttributeType;
 import org.osgi.service.metatype.annotations.Designate;
 import org.osgi.service.metatype.annotations.ObjectClassDefinition;
+import java.net.URI;
 
 // TODO - bad name
 @Component
@@ -39,7 +40,7 @@ public class OidcConnectionImpl implements ClientConnection {
         @AttributeDefinition(type = AttributeType.PASSWORD) String clientSecret();
         String[] scopes();
         String[] additionalAuthorizationParameters();
-        
+
         String webconsole_configurationFactory_nameHint() default "Name: {name}, base URL: {baseUrl}, clientId: {clientId}";
     }
 
@@ -68,6 +69,10 @@ public class OidcConnectionImpl implements ClientConnection {
     public String tokenEndpoint() {
         return metadataRegistry.getTokenEndpoint(cfg.baseUrl()).toString();
     }
+
+    public URI jwkSetURL() {
+        return metadataRegistry.getJWKSetURI(cfg.baseUrl());
+    }
     
     public String clientId() {
         return cfg.clientId();
@@ -77,11 +82,19 @@ public class OidcConnectionImpl implements ClientConnection {
         return cfg.clientSecret();
     }
 
+    public String userInfoUrl() {
+        return metadataRegistry.getUserInfoEndpoint(cfg.baseUrl()).toString();
+    }
+
     public String[] scopes() {
         return cfg.scopes();
     }
 
     public String[] additionalAuthorizationParameters() {
         return cfg.additionalAuthorizationParameters();
+    }
+
+    public String issuer() {
+        return metadataRegistry.getIssuer(cfg.baseUrl());
     }
 }
