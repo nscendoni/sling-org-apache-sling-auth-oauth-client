@@ -18,12 +18,6 @@
  */
 package org.apache.sling.auth.oauth_client.impl;
 
-import org.awaitility.Awaitility;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-
 import java.io.File;
 import java.io.IOException;
 import java.math.BigInteger;
@@ -34,6 +28,12 @@ import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
+
+import org.awaitility.Awaitility;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -49,9 +49,7 @@ public class TokenStoreTest {
 
     @Parameterized.Parameters(name = "name={1}")
     public static Collection<Object[]> parameters() {
-        return List.of(
-                new Object[] { false, "fastSeed = false" },
-                new Object[] { true, "fastSeed = true" });
+        return List.of(new Object[] {false, "fastSeed = false"}, new Object[] {true, "fastSeed = true"});
     }
 
     private final boolean fastSeed;
@@ -59,11 +57,11 @@ public class TokenStoreTest {
     private String encodedToken;
     private File tokenFile;
     private int additionalFileIndex;
-    
+
     public TokenStoreTest(boolean fastSeed, String name) {
         this.fastSeed = fastSeed;
     }
-    
+
     private File additionalTokenFile() {
         return new File(tokenFile.getParent(), tokenFile.getName() + "-" + additionalFileIndex++);
     }
@@ -82,28 +80,23 @@ public class TokenStoreTest {
 
     @Test
     public void invalidTokensTest() {
-        final String [] invalid = {
-            "1@21@3",
-            "1@-@3",
-            "nothing",
-            "0@bad@token"
-        };
+        final String[] invalid = {"1@21@3", "1@-@3", "nothing", "0@bad@token"};
         for (String token : invalid) {
             assertFalse(store.isValid(token));
-        }        
+        }
     }
 
     @Test
     public void expiredTokenTest() throws InvalidKeyException, IllegalStateException, NoSuchAlgorithmException {
         final String expired = store.encode(1, USER_ID);
         Awaitility.await("expiredToken")
-            .atMost(Duration.ofSeconds(5))
-            .pollDelay(Duration.ofMillis(50))
-            .pollInterval(Duration.ofMillis(50))
-            .until(() -> !store.isValid(expired));
+                .atMost(Duration.ofSeconds(5))
+                .pollDelay(Duration.ofMillis(50))
+                .pollInterval(Duration.ofMillis(50))
+                .until(() -> !store.isValid(expired));
         assertFalse(store.isValid(expired));
     }
-    
+
     @Test
     public void loadTokenFileTest() throws Exception {
         final TokenStore newStore = new TokenStore(tokenFile, SESSION_TIMEOUT_MSEC, fastSeed);

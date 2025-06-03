@@ -1,20 +1,29 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
  */
 package org.apache.sling.auth.oauth_client.impl;
+
+import javax.servlet.http.Cookie;
+
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import com.nimbusds.oauth2.sdk.ResponseType;
 import com.nimbusds.oauth2.sdk.Scope;
@@ -28,30 +37,30 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.servlet.http.Cookie;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.util.List;
-import java.util.stream.Collectors;
-
 class RedirectHelper {
 
     // We don't want leave the cookie lying around for a long time because it is not needed.
-    // At the same time, some OAuth user authentication flows take a long time due to 
+    // At the same time, some OAuth user authentication flows take a long time due to
     // consent, account selection, 2FA, etc. so we cannot make this too short.
     private static final int COOKIE_MAX_AGE_SECONDS = 300;
     private static final Logger logger = LoggerFactory.getLogger(RedirectHelper.class);
-    
+
     private RedirectHelper() {
         // Utility class
     }
 
-    static @NotNull RedirectTarget buildRedirectTarget(@NotNull String[] paths, @NotNull URI callbackUri, @NotNull ResolvedConnection conn, @NotNull OAuthCookieValue oAuthCookieValue, @NotNull CryptoService cryptoService) {
+    static @NotNull RedirectTarget buildRedirectTarget(
+            @NotNull String[] paths,
+            @NotNull URI callbackUri,
+            @NotNull ResolvedConnection conn,
+            @NotNull OAuthCookieValue oAuthCookieValue,
+            @NotNull CryptoService cryptoService) {
 
         String path = findLongestPathMatching(paths, callbackUri.getPath());
 
         // Set the cookie with state, connection name, redirect uri, nonce and codeverifier
-        Cookie requestKeyCookie = buildCookie(path, OAuthStateManager.COOKIE_NAME_REQUEST_KEY, cryptoService.encrypt(oAuthCookieValue.getValue()));
+        Cookie requestKeyCookie = buildCookie(
+                path, OAuthStateManager.COOKIE_NAME_REQUEST_KEY, cryptoService.encrypt(oAuthCookieValue.getValue()));
 
         // We build th redirect url to be sent to the browser
         URI authorizationEndpointUri = URI.create(conn.authorizationEndpoint());
@@ -60,13 +69,9 @@ class RedirectHelper {
         Scope scopes = new Scope(conn.scopes().toArray(new String[0]));
         AuthenticationRequest.Builder authRequestBuilder;
         authRequestBuilder = new AuthenticationRequest.Builder(
-                ResponseType.CODE,
-                scopes,
-                new ClientID(conn.clientId()),
-                callbackUri
-        )
-        .endpointURI(authorizationEndpointUri)
-        .state(oAuthCookieValue.getState());
+                        ResponseType.CODE, scopes, new ClientID(conn.clientId()), callbackUri)
+                .endpointURI(authorizationEndpointUri)
+                .state(oAuthCookieValue.getState());
 
         if (oAuthCookieValue.nonce() != null) {
             // For OAuth the nonce is not defined
@@ -92,14 +97,12 @@ class RedirectHelper {
         return new RedirectTarget(uri, requestKeyCookie);
     }
 
-    
     private static @NotNull Cookie buildCookie(@Nullable String path, @NotNull String name, @NotNull String value) {
         Cookie cookie = new Cookie(name, value);
         cookie.setHttpOnly(true);
         cookie.setSecure(true);
         cookie.setMaxAge(COOKIE_MAX_AGE_SECONDS);
-        if (path !=null)
-            cookie.setPath(path);
+        if (path != null) cookie.setPath(path);
         return cookie;
     }
 
@@ -117,7 +120,7 @@ class RedirectHelper {
             return null;
         }
 
-        if (urlPath == null || urlPath.isEmpty())  {
+        if (urlPath == null || urlPath.isEmpty()) {
             return null;
         }
 
@@ -139,5 +142,4 @@ class RedirectHelper {
             return descendant.startsWith(pattern);
         }
     }
-
 }

@@ -1,29 +1,27 @@
 /*
- * Licensed to the Sakai Foundation (SF) under one
- * or more contributor license agreements. See the NOTICE file
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
- * regarding copyright ownership. The SF licenses this file
+ * regarding copyright ownership.  The ASF licenses this file
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
- * with the License. You may obtain a copy of the License at
+ * with the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied. See the License for the
- * specific language governing permissions and limitations under the License.
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
  */
 package org.apache.sling.auth.oauth_client.impl;
-
-import org.jetbrains.annotations.NotNull;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import javax.crypto.Mac;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -38,6 +36,10 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.concurrent.atomic.AtomicReferenceArray;
+
+import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The <code>TokenStore</code> class provides the secure token hash
@@ -110,8 +112,8 @@ class TokenStore {
      * @throws InvalidKeyException
      * @throws IllegalStateException
      */
-    TokenStore(@NotNull final File tokenFile, final long sessionTimeout,
-               final boolean fastSeed) throws NoSuchAlgorithmException, InvalidKeyException, IllegalStateException {
+    TokenStore(@NotNull final File tokenFile, final long sessionTimeout, final boolean fastSeed)
+            throws NoSuchAlgorithmException, InvalidKeyException, IllegalStateException {
 
         this.random = SecureRandom.getInstance(SHA1PRNG);
         this.ttl = sessionTimeout;
@@ -126,11 +128,11 @@ class TokenStore {
             random.setSeed(getFastEntropy());
         } else {
             log.info("Seeding the secure random number generator can take "
-                + "up to several minutes on some operating systems depending "
-                + "upon environment factors. If this is a problem for you, "
-                + "set the system property 'java.security.egd' to "
-                + "'file:/dev/./urandom' or enable the Fast Seed Generator "
-                + "in the Web Console");
+                    + "up to several minutes on some operating systems depending "
+                    + "upon environment factors. If this is a problem for you, "
+                    + "set the system property 'java.security.egd' to "
+                    + "'file:/dev/./urandom' or enable the Fast Seed Generator "
+                    + "in the Web Console");
         }
         byte[] b = new byte[20];
         random.nextBytes(b);
@@ -149,19 +151,19 @@ class TokenStore {
      * @throws NoSuchAlgorithmException
      * @throws InvalidKeyException
      */
-    @NotNull String encode(final long expires, final @NotNull String userId)
+    @NotNull
+    String encode(final long expires, final @NotNull String userId)
             throws IllegalStateException, NoSuchAlgorithmException, InvalidKeyException {
         int token = getActiveToken();
         SecretKey key = currentTokens.get(token);
         return encode(expires, userId, token, key);
     }
 
-    private static @NotNull String encode(final long expires, final @NotNull String userId,
-                                          final int token, final @NotNull SecretKey key) throws IllegalStateException,
-            NoSuchAlgorithmException, InvalidKeyException {
+    private static @NotNull String encode(
+            final long expires, final @NotNull String userId, final int token, final @NotNull SecretKey key)
+            throws IllegalStateException, NoSuchAlgorithmException, InvalidKeyException {
 
-        String cookiePayload = token + String.valueOf(expires)
-            + "@" + userId;
+        String cookiePayload = token + String.valueOf(expires) + "@" + userId;
         Mac m = Mac.getInstance(HMAC_SHA256);
         m.init(key);
         m.update(cookiePayload.getBytes(StandardCharsets.UTF_8));
@@ -218,22 +220,25 @@ class TokenStore {
             log.error("AuthNCookie value '{}' has expired {}ms ago", value, (System.currentTimeMillis() - cookieTime));
             return false;
         }
-        
+
         try {
             SecretKey secretKey = currentTokens.get(tokenNumber);
-            if ( secretKey == null ) {
+            if (secretKey == null) {
                 log.error("AuthNCookie value '{}' points to an unknown token number", value);
                 return false;
             }
             String hmac = encode(cookieTime, parts[2], tokenNumber, secretKey);
             return value.equals(hmac);
-        } catch (ArrayIndexOutOfBoundsException | InvalidKeyException | IllegalStateException | NoSuchAlgorithmException e) {
+        } catch (ArrayIndexOutOfBoundsException
+                | InvalidKeyException
+                | IllegalStateException
+                | NoSuchAlgorithmException e) {
             log.error(e.getMessage(), e);
         }
         log.error("AuthNCookie value '{}' is invalid", value);
         return false;
     }
-    
+
     private static boolean isExpired(long cookieTime) {
         return System.currentTimeMillis() >= cookieTime;
     }
@@ -244,12 +249,10 @@ class TokenStore {
      * @return the current token.
      */
     private synchronized int getActiveToken() {
-        if (System.currentTimeMillis() > nextUpdate
-            || currentTokens.get(currentToken) == null) {
+        if (System.currentTimeMillis() > nextUpdate || currentTokens.get(currentToken) == null) {
             // cycle so that during a typical ttl the tokens get completely
             // refreshed.
-            nextUpdate = System.currentTimeMillis() + ttl
-                / (currentTokens.length() - 1);
+            nextUpdate = System.currentTimeMillis() + ttl / (currentTokens.length() - 1);
             byte[] b = new byte[20];
             random.nextBytes(b);
 
@@ -269,11 +272,11 @@ class TokenStore {
      * Stores the current set of tokens to the token file
      */
     private void saveTokens() {
-            File parent = tokenFile.getAbsoluteFile().getParentFile();
-            log.info("Token File {} parent {} ", tokenFile, parent);
-            if (!parent.exists()) {
-                parent.mkdirs();
-            }
+        File parent = tokenFile.getAbsoluteFile().getParentFile();
+        log.info("Token File {} parent {} ", tokenFile, parent);
+        if (!parent.exists()) {
+            parent.mkdirs();
+        }
         try (DataOutputStream keyOutputStream = new DataOutputStream(new FileOutputStream(tmpTokenFile))) {
             keyOutputStream.writeInt(currentToken);
             keyOutputStream.writeLong(nextUpdate);
