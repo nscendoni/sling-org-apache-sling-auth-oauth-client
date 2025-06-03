@@ -1,20 +1,29 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
  */
 package org.apache.sling.auth.oauth_client.impl;
+
+import javax.jcr.Credentials;
+import javax.jcr.SimpleCredentials;
+
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.apache.jackrabbit.oak.spi.security.authentication.external.ExternalIdentity;
 import org.apache.jackrabbit.oak.spi.security.authentication.external.ExternalIdentityException;
@@ -24,13 +33,6 @@ import org.apache.jackrabbit.oak.spi.security.authentication.token.TokenConstant
 import org.apache.sling.auth.oauth_client.impl.OidcIdentityProvider.OidcGroupRef;
 import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
 import org.junit.jupiter.api.Test;
-
-import javax.jcr.Credentials;
-import javax.jcr.SimpleCredentials;
-
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
@@ -114,7 +116,7 @@ class OidcIdentityProviderTest {
         OidcIdentityProvider test = new OidcIdentityProvider("test");
         ExternalIdentity externalIdentity = test.getIdentity(groupRef);
         assertNotNull(externalIdentity);
-        
+
         assertEquals(Collections.emptyList(), externalIdentity.getDeclaredGroups());
         assertEquals(Collections.emptyMap(), externalIdentity.getProperties());
     }
@@ -136,8 +138,9 @@ class OidcIdentityProviderTest {
         credentials.addGroup("group1");
         ExternalIdentity externalIdentity = test.authenticate(credentials);
         assertNotNull(externalIdentity);
-        
-        ExternalIdentityRef group = externalIdentity.getDeclaredGroups().iterator().next();
+
+        ExternalIdentityRef group =
+                externalIdentity.getDeclaredGroups().iterator().next();
         assertEquals("group1", group.getId());
         assertEquals("test", group.getProviderName());
         assertEquals("token", externalIdentity.getProperties().get(TokenConstants.TOKEN_ATTRIBUTE));
@@ -154,7 +157,7 @@ class OidcIdentityProviderTest {
         Credentials credentials = new OidcAuthCredentials("userId", "wrong-idp");
         assertNull(test.authenticate(credentials));
     }
-    
+
     @Test
     void authenticateUnsupportedCredentials() {
         OidcIdentityProvider test = new OidcIdentityProvider("test");
@@ -173,14 +176,15 @@ class OidcIdentityProviderTest {
     }
 
     @Test
-    void fromExternalIdentityRefFailure()  {
+    void fromExternalIdentityRefFailure() {
         OidcGroupRef groupRef = mock(OidcGroupRef.class);
         when(groupRef.getProviderName()).thenReturn("test");
         when(groupRef.getId()).thenReturn("test");
         when(groupRef.getString()).thenReturn("test");
 
         OidcIdentityProvider test = new OidcIdentityProvider("wrong-idp");
-        ExternalIdentityException exception = assertThrows(ExternalIdentityException.class, () -> test.fromExternalIdentityRef(groupRef));
+        ExternalIdentityException exception =
+                assertThrows(ExternalIdentityException.class, () -> test.fromExternalIdentityRef(groupRef));
         assertEquals("Foreign IDP test", exception.getMessage());
     }
 
@@ -194,7 +198,6 @@ class OidcIdentityProviderTest {
     void getGroup() {
         OidcIdentityProvider test = new OidcIdentityProvider("test");
         assertThrows(UnsupportedOperationException.class, () -> test.getGroup("groupId"));
-
     }
 
     @Test

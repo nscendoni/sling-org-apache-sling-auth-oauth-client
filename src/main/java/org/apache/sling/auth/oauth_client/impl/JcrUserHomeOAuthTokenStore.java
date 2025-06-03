@@ -1,26 +1,22 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
  */
 package org.apache.sling.auth.oauth_client.impl;
-
-import static org.osgi.service.component.annotations.ConfigurationPolicy.REQUIRE;
-
-import java.time.ZonedDateTime;
-import java.util.Calendar;
-import java.util.GregorianCalendar;
 
 import javax.jcr.PropertyType;
 import javax.jcr.RepositoryException;
@@ -28,11 +24,15 @@ import javax.jcr.Session;
 import javax.jcr.Value;
 import javax.jcr.ValueFactory;
 
+import java.time.ZonedDateTime;
+import java.util.Calendar;
+import java.util.GregorianCalendar;
+
 import org.apache.jackrabbit.api.security.user.User;
 import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.auth.oauth_client.ClientConnection;
-import org.jetbrains.annotations.NotNull;
 import org.apache.sling.commons.crypto.CryptoService;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
@@ -40,24 +40,27 @@ import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.osgi.service.component.annotations.ConfigurationPolicy.REQUIRE;
+
 // a config class is intentionally not defined, but a config is required to select an implementation
 @Component(configurationPolicy = REQUIRE)
 public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
-    
+
     private static final String PROPERTY_NAME_EXPIRES_AT = "expires_at";
     private static final String PROPERTY_NAME_REFRESH_TOKEN = "refresh_token";
 
     private static final Logger logger = LoggerFactory.getLogger(JcrUserHomeOAuthTokenStore.class);
-    
+
     private final CryptoService cryptoService;
-    
+
     @Activate
     public JcrUserHomeOAuthTokenStore(@Reference CryptoService cryptoService) {
         this.cryptoService = cryptoService;
     }
 
     @Override
-    public @NotNull OAuthToken getAccessToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) {
+    public @NotNull OAuthToken getAccessToken(
+            @NotNull ClientConnection connection, @NotNull ResourceResolver resolver) {
         try {
             User user = adaptToUser(resolver);
             Value[] expiresAt = user.getProperty(propertyPath(connection, PROPERTY_NAME_EXPIRES_AT));
@@ -77,22 +80,25 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
         }
     }
 
-    private @NotNull OAuthToken getToken(@NotNull ClientConnection connection, @NotNull User user, @NotNull String propertyName) throws RepositoryException {
+    private @NotNull OAuthToken getToken(
+            @NotNull ClientConnection connection, @NotNull User user, @NotNull String propertyName)
+            throws RepositoryException {
 
         Value[] tokenValue = user.getProperty(propertyPath(connection, propertyName));
-        if ( tokenValue == null )
-            return new OAuthToken(TokenState.MISSING, null);
+        if (tokenValue == null) return new OAuthToken(TokenState.MISSING, null);
 
-        if ( tokenValue.length != 1)
-            throw new OAuthException(String.format("Unexpected value count %d for token property %s" , tokenValue.length, propertyName));
+        if (tokenValue.length != 1)
+            throw new OAuthException(
+                    String.format("Unexpected value count %d for token property %s", tokenValue.length, propertyName));
 
         String encryptedValue = tokenValue[0].getString();
-        
+
         return new OAuthToken(TokenState.VALID, cryptoService.decrypt(encryptedValue));
     }
-    
+
     @Override
-    public @NotNull OAuthToken getRefreshToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) {
+    public @NotNull OAuthToken getRefreshToken(
+            @NotNull ClientConnection connection, @NotNull ResourceResolver resolver) {
         try {
             User user = adaptToUser(resolver);
             return getToken(connection, user, PROPERTY_NAME_REFRESH_TOKEN);
@@ -100,9 +106,10 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
             throw new OAuthException(e);
         }
     }
-    
+
     @Override
-    public void persistTokens(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver, @NotNull OAuthTokens tokens) {
+    public void persistTokens(
+            @NotNull ClientConnection connection, @NotNull ResourceResolver resolver, @NotNull OAuthTokens tokens) {
         try {
             User user = adaptToUser(resolver);
             Session session = adaptToSession(resolver);
@@ -110,7 +117,7 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
 
             setTokenProperty(user, vf, propertyPath(connection, PROPERTY_NAME_ACCESS_TOKEN), tokens.accessToken());
             setTokenProperty(user, vf, propertyPath(connection, PROPERTY_NAME_REFRESH_TOKEN), tokens.refreshToken());
-            
+
             ZonedDateTime expiry = null;
             long expiresAt = tokens.expiresAt();
             if (expiresAt > 0) {
@@ -128,9 +135,10 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
             throw new OAuthException(e);
         }
     }
-    
+
     @Override
-    public void clearAccessToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) throws OAuthException {
+    public void clearAccessToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver)
+            throws OAuthException {
         try {
             User currentUser = adaptToUser(resolver);
 
@@ -143,8 +151,13 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
             throw new OAuthException(e);
         }
     }
-    
-    private void setTokenProperty(@NotNull User user, @NotNull ValueFactory valueFactory, @NotNull String propertyPath, @Nullable String value) throws RepositoryException {
+
+    private void setTokenProperty(
+            @NotNull User user,
+            @NotNull ValueFactory valueFactory,
+            @NotNull String propertyPath,
+            @Nullable String value)
+            throws RepositoryException {
         if (value != null) {
             user.setProperty(propertyPath, createTokenValue(valueFactory, value));
         } else {
@@ -153,7 +166,7 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
             user.removeProperty(propertyPath);
         }
     }
-    
+
     private @NotNull Value createTokenValue(@NotNull ValueFactory valueFactory, @NotNull String propertyValue) {
         String encryptedValue = cryptoService.encrypt(propertyValue);
         return valueFactory.createValue(encryptedValue);
@@ -166,7 +179,7 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
     private static @NotNull String nodePath(@NotNull ClientConnection connection) {
         return "oauth-tokens/" + connection.name();
     }
-    
+
     private static @NotNull User adaptToUser(@NotNull ResourceResolver resolver) {
         User user = resolver.adaptTo(User.class);
         if (user == null) {

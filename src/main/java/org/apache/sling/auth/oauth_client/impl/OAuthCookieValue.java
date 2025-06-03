@@ -1,37 +1,39 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
  */
 package org.apache.sling.auth.oauth_client.impl;
 
+import com.nimbusds.oauth2.sdk.id.State;
 import com.nimbusds.oauth2.sdk.pkce.CodeVerifier;
 import com.nimbusds.openid.connect.sdk.Nonce;
 import org.apache.sling.commons.crypto.CryptoService;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-
-import com.nimbusds.oauth2.sdk.id.State;
-import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class OAuthCookieValue {
 
     private final @NotNull String perRequestKey;
     private final @NotNull String connectionName;
 
-    // This is NOT the callback URL, but the URL to which the user should be redirected after the OAuth flow is completed.
+    // This is NOT the callback URL, but the URL to which the user should be redirected after the OAuth flow is
+    // completed.
     private final @Nullable String redirect;
     private @Nullable Nonce nonce;
     private @Nullable CodeVerifier codeVerifier;
@@ -43,15 +45,18 @@ public class OAuthCookieValue {
     public static final int NONCE_INDEX = 3;
     public static final int CODE_VERIFIER_INDEX = 4;
 
-
     public OAuthCookieValue(@NotNull String perRequestKey, @NotNull String connectionName, @Nullable String redirect) {
         this.perRequestKey = perRequestKey;
         this.connectionName = connectionName;
         this.redirect = redirect;
     }
 
-    public OAuthCookieValue(@NotNull String perRequestKey, @NotNull String connectionName, @Nullable String redirect,
-                            @NotNull Nonce nonce, @Nullable CodeVerifier codeVerifier) {
+    public OAuthCookieValue(
+            @NotNull String perRequestKey,
+            @NotNull String connectionName,
+            @Nullable String redirect,
+            @NotNull Nonce nonce,
+            @Nullable CodeVerifier codeVerifier) {
         this.perRequestKey = perRequestKey;
         this.connectionName = connectionName;
         this.redirect = redirect;
@@ -82,9 +87,10 @@ public class OAuthCookieValue {
             this.nonce = parts[NONCE_INDEX].isEmpty() ? null : new Nonce(parts[NONCE_INDEX]);
         }
 
-        //In OIDC with PKCE we also have code verifier
+        // In OIDC with PKCE we also have code verifier
         if (parts.length > 4) {
-            this.codeVerifier = parts[CODE_VERIFIER_INDEX].isEmpty() ? null : new CodeVerifier(parts[CODE_VERIFIER_INDEX]);
+            this.codeVerifier =
+                    parts[CODE_VERIFIER_INDEX].isEmpty() ? null : new CodeVerifier(parts[CODE_VERIFIER_INDEX]);
         }
     }
 
@@ -139,10 +145,14 @@ public class OAuthCookieValue {
     }
 
     public @NotNull String getValue() {
-        return  perRequestKey + '|' +
-                connectionName + '|' +
-                (redirect == null? "": redirect) + '|' +
-                (nonce == null? "": nonce.getValue()) + '|' +
-                (codeVerifier == null ? "" : codeVerifier.getValue());
+        return perRequestKey
+                + '|'
+                + connectionName
+                + '|'
+                + (redirect == null ? "" : redirect)
+                + '|'
+                + (nonce == null ? "" : nonce.getValue())
+                + '|'
+                + (codeVerifier == null ? "" : codeVerifier.getValue());
     }
 }

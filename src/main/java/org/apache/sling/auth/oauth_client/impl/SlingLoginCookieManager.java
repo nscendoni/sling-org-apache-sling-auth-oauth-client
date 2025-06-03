@@ -1,21 +1,32 @@
 /*
- * Licensed to the Sakai Foundation (SF) under one
- * or more contributor license agreements. See the NOTICE file
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
- * regarding copyright ownership. The SF licenses this file
+ * regarding copyright ownership.  The ASF licenses this file
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
- * with the License. You may obtain a copy of the License at
+ * with the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied. See the License for the
- * specific language governing permissions and limitations under the License.
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
  */
 package org.apache.sling.auth.oauth_client.impl;
+
+import javax.jcr.Credentials;
+import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.sling.auth.core.spi.AuthenticationInfo;
@@ -33,22 +44,10 @@ import org.osgi.service.metatype.annotations.ObjectClassDefinition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.jcr.Credentials;
-import javax.servlet.http.Cookie;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import java.io.File;
-import java.nio.charset.StandardCharsets;
-import java.security.InvalidKeyException;
-import java.security.NoSuchAlgorithmException;
-
 @Component(
         service = LoginCookieManager.class,
         immediate = true,
-        property = {
-                "service.ranking:Integer=10"
-        }
-)
+        property = {"service.ranking:Integer=10"})
 public class SlingLoginCookieManager implements LoginCookieManager {
 
     private static final Logger log = LoggerFactory.getLogger(SlingLoginCookieManager.class);
@@ -59,24 +58,18 @@ public class SlingLoginCookieManager implements LoginCookieManager {
 
     @ObjectClassDefinition(
             name = "Apache Sling Token Update Configuration for OIDC Authentication Handler",
-            description = "Apache Sling Token Update Configuration for OIDC Authentication Handler"
-    )
-
+            description = "Apache Sling Token Update Configuration for OIDC Authentication Handler")
     @interface SlingLoginCookieManagerConfig {
-        @AttributeDefinition(name = "tokenFile",
-                description = "Token File")
+        @AttributeDefinition(name = "tokenFile", description = "Token File")
         String tokenFile() default "cookie-tokens.bin";
 
-        @AttributeDefinition(name = "form_token_fastseed",
-                description = "Form Token Fast Seed")
+        @AttributeDefinition(name = "form_token_fastseed", description = "Form Token Fast Seed")
         boolean form_token_fastseed() default false;
 
-        @AttributeDefinition(name = "sessionTimeout",
-                description = "Session Timeout")
+        @AttributeDefinition(name = "sessionTimeout", description = "Session Timeout")
         long sessionTimeout() default 8 * 60 * 60 * 1000;
 
-        @AttributeDefinition(name = "cookieName",
-                description = "Cookie Name")
+        @AttributeDefinition(name = "cookieName", description = "Cookie Name")
         String cookieName() default "sling.oidcauth";
     }
 
@@ -92,26 +85,30 @@ public class SlingLoginCookieManager implements LoginCookieManager {
         this.cookieName = config.cookieName();
         this.tokenStore = new TokenStore(tokenFile, sessionTimeout, fastSeed);
     }
-    
+
     @Override
-    public void setLoginCookie(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response, 
-                               @NotNull SlingRepository repository, @NotNull Credentials creds) {
+    public void setLoginCookie(
+            @NotNull HttpServletRequest request,
+            @NotNull HttpServletResponse response,
+            @NotNull SlingRepository repository,
+            @NotNull Credentials creds) {
 
         long expires = System.currentTimeMillis() + this.sessionTimeout;
 
         // get current authentication data, may be missing after first login
         String authData = null;
         try {
-            authData = tokenStore.encode(expires, ((OidcAuthCredentials)creds).getUserId());
-        } catch (NoSuchAlgorithmException|InvalidKeyException e) {
+            authData = tokenStore.encode(expires, ((OidcAuthCredentials) creds).getUserId());
+        } catch (NoSuchAlgorithmException | InvalidKeyException e) {
             throw new RuntimeException(e);
-        } 
+        }
         String cookieValue = Base64.encodeBase64URLSafeString(authData.getBytes(StandardCharsets.UTF_8));
         setCookie(request, response, cookieName, cookieValue, (int) (sessionTimeout / 1000));
     }
 
     @Override
-    @Nullable public AuthenticationInfo verifyLoginCookie(@NotNull HttpServletRequest request) {
+    @Nullable
+    public AuthenticationInfo verifyLoginCookie(@NotNull HttpServletRequest request) {
         Cookie cookie = getLoginCookie(request);
         if (cookie == null) {
             return null;
@@ -164,8 +161,12 @@ public class SlingLoginCookieManager implements LoginCookieManager {
         return null;
     }
 
-    private static void setCookie(@NotNull final HttpServletRequest request, @NotNull final HttpServletResponse response, 
-                           @NotNull final String name, @NotNull final String value, final int maxAge) {
+    private static void setCookie(
+            @NotNull final HttpServletRequest request,
+            @NotNull final HttpServletResponse response,
+            @NotNull final String name,
+            @NotNull final String value,
+            final int maxAge) {
         // set the cookie
         final StringBuilder cookie = new StringBuilder(name);
         cookie.append('=');
@@ -184,7 +185,7 @@ public class SlingLoginCookieManager implements LoginCookieManager {
 
     /**
      * Returns an absolute file indicating the file to use to persist the security
-    4 * tokens.
+     * 4 * tokens.
      * <p>
      * This method is not part of the API of this class and is package private to
      * enable unit tests.
@@ -195,7 +196,8 @@ public class SlingLoginCookieManager implements LoginCookieManager {
      *            The BundleContext to use to make an relative file absolute
      * @return The absolute file
      */
-    private static @NotNull File getTokenFile(@NotNull final String tokenFileName, @NotNull final BundleContext bundleContext) {
+    private static @NotNull File getTokenFile(
+            @NotNull final String tokenFileName, @NotNull final BundleContext bundleContext) {
         File tokenFile = new File(tokenFileName);
         if (tokenFile.isAbsolute()) {
             return tokenFile;
@@ -213,5 +215,4 @@ public class SlingLoginCookieManager implements LoginCookieManager {
 
         return tokenFile.getAbsoluteFile();
     }
-
 }

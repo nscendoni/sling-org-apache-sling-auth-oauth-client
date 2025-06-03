@@ -23,235 +23,29 @@
         <groupId>org.apache.sling</groupId>
         <artifactId>sling-bundle-parent</artifactId>
         <version>62</version>
-        <relativePath/>
+        <relativePath />
     </parent>
 
-	<artifactId>org.apache.sling.auth.oauth-client</artifactId>
-	<version>0.1.1-SNAPSHOT</version>
+    <artifactId>org.apache.sling.auth.oauth-client</artifactId>
+    <version>0.1.1-SNAPSHOT</version>
 
-	<name>Apache Sling OAuth Client</name>
-	<description>Apache Sling OAuth 2.0 client with OIDC support</description>
+    <name>Apache Sling OAuth Client</name>
+    <description>Apache Sling OAuth 2.0 client with OIDC support</description>
+
+    <scm>
+        <connection>scm:git:https://gitbox.apache.org/repos/asf/sling-org-apache-sling-auth-oauth-client.git</connection>
+        <developerConnection>scm:git:https://gitbox.apache.org/repos/asf/sling-org-apache-sling-auth-oauth-client.git</developerConnection>
+        <tag>org.apache.sling.auth.oauth-client-0.1.0</tag>
+        <url>https://github.com/apache/sling-org-apache-sling-auth-oauth-client.git</url>
+    </scm>
 
     <properties>
         <sling.java.version>11</sling.java.version>
         <project.build.outputTimestamp>1747146729</project.build.outputTimestamp>
         <bnd.baseline.skip>true</bnd.baseline.skip>
         <it.startTimeoutSeconds>60</it.startTimeoutSeconds>
-	</properties>
-
-    <scm>
-        <connection>scm:git:https://gitbox.apache.org/repos/asf/sling-org-apache-sling-auth-oauth-client.git</connection>
-        <developerConnection>scm:git:https://gitbox.apache.org/repos/asf/sling-org-apache-sling-auth-oauth-client.git</developerConnection>
-        <url>https://github.com/apache/sling-org-apache-sling-auth-oauth-client.git</url>
-      <tag>org.apache.sling.auth.oauth-client-0.1.0</tag>
-  </scm>
-
-	<build>
-		<plugins>
-			<plugin>
-				<groupId>biz.aQute.bnd</groupId>
-				<artifactId>bnd-maven-plugin</artifactId>
-			</plugin>
-            <plugin>
-               <artifactId>maven-failsafe-plugin</artifactId>
-               <executions>
-                   <execution>
-                       <goals>
-                           <goal>integration-test</goal>
-                           <goal>verify</goal>
-                       </goals>
-                   </execution>
-               </executions>
-               <configuration>
-                   <systemPropertyVariables>
-                       <sling.http.port>${http.port}</sling.http.port>
-                   </systemPropertyVariables>
-               </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.sling</groupId>
-                <artifactId>slingfeature-maven-plugin</artifactId>
-                <version>1.9.2</version>
-                <extensions>true</extensions>
-                <configuration>
-                    <skipAddFeatureDependencies>true</skipAddFeatureDependencies>
-                    <framework>
-                        <groupId>org.apache.felix</groupId>
-                        <artifactId>org.apache.felix.framework</artifactId>
-                        <version>7.0.5</version>
-                    </framework>
-
-                    <!--
-                        Prepares a feature model aggregate that takes the following features from
-                        the Sling Starter:
-                        - nosample_base - the base Sling Starter
-                        - oak_persistence_sns - SegmentNodeStore persistence for Oak
-                        - composum - The Composum Nodes administration tool
-                        Notably missing are the slingshot and starter samples
-                     -->
-                    <aggregates>
-                        <aggregate>
-                            <classifier>app</classifier>
-                            <filesInclude>main.json</filesInclude>
-                            <attach>false</attach>
-                            <includeArtifact>
-                                <groupId>org.apache.sling</groupId>
-                                <artifactId>org.apache.sling.starter</artifactId>
-                                <classifier>nosample_base</classifier>
-                                <version>13</version>
-                                <type>slingosgifeature</type>
-                            </includeArtifact>
-                            <includeArtifact>
-                                <groupId>org.apache.sling</groupId>
-                                <artifactId>org.apache.sling.starter</artifactId>
-                                <classifier>oak_persistence_sns</classifier>
-                                <version>13</version>
-                                <type>slingosgifeature</type>
-                            </includeArtifact>
-                            <includeArtifact>
-                                <groupId>org.apache.sling</groupId>
-                                <artifactId>org.apache.sling.starter</artifactId>
-                                <classifier>starter</classifier>
-                                <version>13</version>
-                                <type>slingosgifeature</type>
-                            </includeArtifact>
-                            <includeArtifact>
-                                <groupId>org.apache.sling</groupId>
-                                <artifactId>org.apache.sling.starter</artifactId>
-                                <classifier>composum</classifier>
-                                <version>13</version>
-                                <type>slingosgifeature</type>
-                            </includeArtifact>
-                        </aggregate>
-                    </aggregates>
-                    <repositories>
-                        <repository>
-                            <includeClassifier>app</includeClassifier>
-                        </repository>
-                    </repositories>
-                    <scans>
-                        <scan>
-                            <includeClassifier>app</includeClassifier>
-                        </scan>
-                    </scans>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>prepare-features</id>
-                        <phase>prepare-package</phase>
-                        <goals>
-                            <goal>aggregate-features</goal>
-                            <goal>analyse-features</goal>
-                            <goal>attach-features</goal>
-                        </goals>
-                    </execution>
-                    <execution>
-                        <id>create-app-repository</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>repository</goal>
-                        </goals>
-                    </execution>
-               </executions>
-            </plugin>
-            <!-- reserve network ports for the integration tests -->
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>build-helper-maven-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>reserve-network-port</id>
-                        <goals>
-                            <goal>reserve-network-port</goal>
-                        </goals>
-                        <phase>pre-integration-test</phase>
-                        <configuration>
-                            <portNames>
-                                <portName>http.port</portName>
-                            </portNames>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <artifactId>maven-dependency-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>prepare-feature-launcher</id>
-                        <goals>
-                            <goal>unpack</goal>
-                        </goals>
-                        <phase>package</phase>
-                        <configuration>
-                            <artifactItems>
-                                <artifactItem>
-                                    <groupId>org.apache.sling</groupId>
-                                    <artifactId>org.apache.sling.feature.launcher</artifactId>
-                                    <version>1.2.4</version>
-                                    <type>tar.gz</type>
-                                    <!-- remove the version number from the unpacked folder -->
-                                    <fileMappers>
-                                        <org.codehaus.plexus.components.io.filemappers.RegExpFileMapper>
-                                            <pattern>\Qorg.apache.sling.feature.launcher-1.2.4\E</pattern>
-                                            <replacement>org.apache.sling.feature.launcher</replacement>
-                                        </org.codehaus.plexus.components.io.filemappers.RegExpFileMapper>
-                                    </fileMappers>
-                                </artifactItem>
-                            </artifactItems>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.sling</groupId>
-                <artifactId>feature-launcher-maven-plugin</artifactId>
-                <version>0.1.8</version>
-                <configuration>
-                    <launches>
-                        <launch>
-                            <id>sling-starter-oak-tar</id>
-                            <skip>${skipITs}</skip>
-                            <featureFile>${project.slingfeature.outputDirectory}/feature-app.json</featureFile>
-                            <repositoryUrls>
-                                <repositoryUrl>file://${project.build.directory}/artifacts</repositoryUrl>
-                            </repositoryUrls>
-                            <launcherArguments>
-                                <!-- <vm-options>
-                                    <value>-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:3007</value>
-                                </vm-options> -->
-                                <frameworkProperties>
-                                    <org.osgi.service.http.port>${http.port}</org.osgi.service.http.port>
-                                </frameworkProperties>
-                            </launcherArguments>
-                            <environmentVariables>
-                                <IT_ENCRYPTION_PASSWORD>random</IT_ENCRYPTION_PASSWORD>
-                            </environmentVariables>
-                            <startTimeoutSeconds>${it.startTimeoutSeconds}</startTimeoutSeconds>
-                        </launch>
-                    </launches>
-                </configuration>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>start</goal>
-                            <goal>stop</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.rat</groupId>
-                <artifactId>apache-rat-plugin</artifactId>
-                <version>0.14</version>
-                <configuration>
-                    <excludes>
-                        <exclude>keycloak-data/**</exclude>
-                    </excludes>
-                </configuration>
-            </plugin>
-		</plugins>
-	</build>
-	<dependencies>
+    </properties>
+    <dependencies>
         <dependency>
             <groupId>org.osgi</groupId>
             <artifactId>org.osgi.service.component.annotations</artifactId>
@@ -319,7 +113,7 @@
             <version>5.0.0</version>
             <scope>provided</scope>
         </dependency>
-        
+
         <!-- test dependencies -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -458,4 +252,210 @@
             <scope>compile</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>biz.aQute.bnd</groupId>
+                <artifactId>bnd-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <sling.http.port>${http.port}</sling.http.port>
+                    </systemPropertyVariables>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.sling</groupId>
+                <artifactId>slingfeature-maven-plugin</artifactId>
+                <version>1.9.2</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <skipAddFeatureDependencies>true</skipAddFeatureDependencies>
+                    <framework>
+                        <groupId>org.apache.felix</groupId>
+                        <artifactId>org.apache.felix.framework</artifactId>
+                        <version>7.0.5</version>
+                    </framework>
+
+                    <!--
+                        Prepares a feature model aggregate that takes the following features from
+                        the Sling Starter:
+                        - nosample_base - the base Sling Starter
+                        - oak_persistence_sns - SegmentNodeStore persistence for Oak
+                        - composum - The Composum Nodes administration tool
+                        Notably missing are the slingshot and starter samples
+                     -->
+                    <aggregates>
+                        <aggregate>
+                            <classifier>app</classifier>
+                            <filesInclude>main.json</filesInclude>
+                            <attach>false</attach>
+                            <includeArtifact>
+                                <groupId>org.apache.sling</groupId>
+                                <artifactId>org.apache.sling.starter</artifactId>
+                                <classifier>nosample_base</classifier>
+                                <version>13</version>
+                                <type>slingosgifeature</type>
+                            </includeArtifact>
+                            <includeArtifact>
+                                <groupId>org.apache.sling</groupId>
+                                <artifactId>org.apache.sling.starter</artifactId>
+                                <classifier>oak_persistence_sns</classifier>
+                                <version>13</version>
+                                <type>slingosgifeature</type>
+                            </includeArtifact>
+                            <includeArtifact>
+                                <groupId>org.apache.sling</groupId>
+                                <artifactId>org.apache.sling.starter</artifactId>
+                                <classifier>starter</classifier>
+                                <version>13</version>
+                                <type>slingosgifeature</type>
+                            </includeArtifact>
+                            <includeArtifact>
+                                <groupId>org.apache.sling</groupId>
+                                <artifactId>org.apache.sling.starter</artifactId>
+                                <classifier>composum</classifier>
+                                <version>13</version>
+                                <type>slingosgifeature</type>
+                            </includeArtifact>
+                        </aggregate>
+                    </aggregates>
+                    <repositories>
+                        <repository>
+                            <includeClassifier>app</includeClassifier>
+                        </repository>
+                    </repositories>
+                    <scans>
+                        <scan>
+                            <includeClassifier>app</includeClassifier>
+                        </scan>
+                    </scans>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>prepare-features</id>
+                        <goals>
+                            <goal>aggregate-features</goal>
+                            <goal>analyse-features</goal>
+                            <goal>attach-features</goal>
+                        </goals>
+                        <phase>prepare-package</phase>
+                    </execution>
+                    <execution>
+                        <id>create-app-repository</id>
+                        <goals>
+                            <goal>repository</goal>
+                        </goals>
+                        <phase>package</phase>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- reserve network ports for the integration tests -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>reserve-network-port</id>
+                        <goals>
+                            <goal>reserve-network-port</goal>
+                        </goals>
+                        <phase>pre-integration-test</phase>
+                        <configuration>
+                            <portNames>
+                                <portName>http.port</portName>
+                            </portNames>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>prepare-feature-launcher</id>
+                        <goals>
+                            <goal>unpack</goal>
+                        </goals>
+                        <phase>package</phase>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>org.apache.sling</groupId>
+                                    <artifactId>org.apache.sling.feature.launcher</artifactId>
+                                    <version>1.2.4</version>
+                                    <type>tar.gz</type>
+                                    <!-- remove the version number from the unpacked folder -->
+                                    <fileMappers>
+                                        <org.codehaus.plexus.components.io.filemappers.RegExpFileMapper>
+                                            <pattern>\Qorg.apache.sling.feature.launcher-1.2.4\E</pattern>
+                                            <replacement>org.apache.sling.feature.launcher</replacement>
+                                        </org.codehaus.plexus.components.io.filemappers.RegExpFileMapper>
+                                    </fileMappers>
+                                </artifactItem>
+                            </artifactItems>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.sling</groupId>
+                <artifactId>feature-launcher-maven-plugin</artifactId>
+                <version>0.1.8</version>
+                <configuration>
+                    <launches>
+                        <launch>
+                            <id>sling-starter-oak-tar</id>
+                            <skip>${skipITs}</skip>
+                            <featureFile>${project.slingfeature.outputDirectory}/feature-app.json</featureFile>
+                            <repositoryUrls>
+                                <repositoryUrl>file://${project.build.directory}/artifacts</repositoryUrl>
+                            </repositoryUrls>
+                            <launcherArguments>
+                                <!-- <vm-options>
+                                    <value>-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:3007</value>
+                                </vm-options> -->
+                                <frameworkProperties>
+                                    <org.osgi.service.http.port>${http.port}</org.osgi.service.http.port>
+                                </frameworkProperties>
+                            </launcherArguments>
+                            <environmentVariables>
+                                <IT_ENCRYPTION_PASSWORD>random</IT_ENCRYPTION_PASSWORD>
+                            </environmentVariables>
+                            <startTimeoutSeconds>${it.startTimeoutSeconds}</startTimeoutSeconds>
+                        </launch>
+                    </launches>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>start</goal>
+                            <goal>stop</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.rat</groupId>
+                <artifactId>apache-rat-plugin</artifactId>
+                <version>0.14</version>
+                <configuration>
+                    <excludes>
+                        <exclude>keycloak-data/**</exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>

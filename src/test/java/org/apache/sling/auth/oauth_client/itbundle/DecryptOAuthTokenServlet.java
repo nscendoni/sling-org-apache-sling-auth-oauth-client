@@ -1,30 +1,30 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
  */
 package org.apache.sling.auth.oauth_client.itbundle;
 
-import static java.lang.String.format;
+import javax.servlet.Servlet;
+import javax.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import javax.servlet.Servlet;
-import javax.servlet.http.HttpServletResponse;
 
 import org.apache.sling.api.SlingHttpServletRequest;
 import org.apache.sling.api.SlingHttpServletResponse;
@@ -43,58 +43,61 @@ import org.osgi.service.component.annotations.ReferencePolicyOption;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static java.lang.String.format;
+
 @Component(service = Servlet.class)
 @SlingServletPaths("/system/sling/decrypt")
 public class DecryptOAuthTokenServlet extends SlingAllMethodsServlet {
-    
+
     private static final long serialVersionUID = 1L;
-    
+
     private final Logger logger = LoggerFactory.getLogger(getClass());
-    private final Map<String,CryptoService> cryptoServicesByName = new HashMap<>();
-    
+    private final Map<String, CryptoService> cryptoServicesByName = new HashMap<>();
+
     @Activate
-    public DecryptOAuthTokenServlet(@Reference(
-            service=CryptoService.class,
-            cardinality = ReferenceCardinality.MULTIPLE,
-            policy = ReferencePolicy.DYNAMIC,
-            policyOption = ReferencePolicyOption.GREEDY) 
-        List<ServiceReference<CryptoService>> cryptoServices, BundleContext ctx) {
-        
-        cryptoServices.forEach( sr -> {
-           CryptoService cs = ctx.getService(sr);
-           String[] cryptoNames = (String[]) sr.getProperty("names");
-            for (String cryptoName : cryptoNames)
-                cryptoServicesByName.put(cryptoName, cs);
+    public DecryptOAuthTokenServlet(
+            @Reference(
+                            service = CryptoService.class,
+                            cardinality = ReferenceCardinality.MULTIPLE,
+                            policy = ReferencePolicy.DYNAMIC,
+                            policyOption = ReferencePolicyOption.GREEDY)
+                    List<ServiceReference<CryptoService>> cryptoServices,
+            BundleContext ctx) {
+
+        cryptoServices.forEach(sr -> {
+            CryptoService cs = ctx.getService(sr);
+            String[] cryptoNames = (String[]) sr.getProperty("names");
+            for (String cryptoName : cryptoNames) cryptoServicesByName.put(cryptoName, cs);
         });
 
         logger.info("Collected cryptoServices with names: {}", cryptoServicesByName.keySet());
     }
 
     @Override
-    protected void doPost(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response) throws IOException {
+    protected void doPost(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response)
+            throws IOException {
         String token = request.getParameter("token");
         if (token == null) {
             response.sendError(400, "Missing 'token' parameter");
             return;
         }
-        
+
         String cryptoServiceName = request.getParameter("cryptoServiceName");
         if (cryptoServiceName == null) {
             response.sendError(400, "Missing 'cryptoServiceName' parameter");
             return;
         }
-        
+
         CryptoService cryptoService = cryptoServicesByName.get(cryptoServiceName);
         if (cryptoService == null) {
             response.sendError(400, format("Unknown cryptoService  parameter '%s'", cryptoServiceName));
             return;
         }
-        
+
         logger.info("Decrypting token {}", token);
-        
+
         response.setStatus(HttpServletResponse.SC_OK);
         response.setContentType("text/plain");
         response.getWriter().write(cryptoService.decrypt(token));
     }
-
 }
