@@ -18,6 +18,7 @@ package org.apache.sling.auth.oauth_client.impl;
 
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.metatype.annotations.AttributeDefinition;
@@ -54,29 +55,27 @@ public class OAuthConnectionImpl implements ClientConnection {
     public @NotNull String name() {
         return cfg.name();
     }
-
-
-    public String authorizationEndpoint() {
+    public @NotNull String authorizationEndpoint() {
         return cfg.authorizationEndpoint();
     }
     
-    public String tokenEndpoint() {
+    public @NotNull String tokenEndpoint() {
         return cfg.tokenEndpoint();
     }
     
-    public String clientId() {
+    public @NotNull String clientId() {
         return cfg.clientId();
     }
 
-    public String clientSecret() {
+    public @Nullable String clientSecret() {
         return cfg.clientSecret();
     }
 
-    public String[] scopes() {
+    public @NotNull String[] scopes() {
         return cfg.scopes();
     }
 
-    public String[] additionalAuthorizationParameters() {
+    public @NotNull String[] additionalAuthorizationParameters() {
         return cfg.additionalAuthorizationParameters();
     }
 }

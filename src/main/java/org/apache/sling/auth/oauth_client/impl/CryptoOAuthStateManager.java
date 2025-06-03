@@ -46,20 +46,20 @@ public class CryptoOAuthStateManager implements OAuthStateManager {
     }
     
     @Override
-    public @NotNull State toNimbusState(@NotNull OAuthState state) {
-        
+    public @NotNull State toNimbusState(@NotNull OAuthCookieValue state) {
+
         // Generate and encrypt state
         String rawState = state.perRequestKey() + "|" + state.connectionName();
-        if ( state.redirect() != null ) {
+        if (state.redirect() != null) {
             rawState += "|" + state.redirect();
         }
-        
+
         return new State(cryptoService.encrypt(rawState));
     }
 
     @Override
-    public @NotNull Optional<OAuthState> toOAuthState(@Nullable State state) {
-        
+    public @NotNull Optional<OAuthCookieValue> toOAuthState(@Nullable State state) {
+
         if ( state == null )
             return Optional.empty();
         
@@ -69,11 +69,11 @@ public class CryptoOAuthStateManager implements OAuthStateManager {
             String rawState = cryptoService.decrypt(encrypted);
             
             String[] parts = rawState.split("\\|");
-            if ( parts.length == 2 )
-                return Optional.of(new OAuthState(parts[0], parts[1], null));
-            else if ( parts.length == 3) 
-                return Optional.of(new OAuthState(parts[0], parts[1], parts[2]));
-                        
+            if (parts.length == 2)
+                return Optional.of(new OAuthCookieValue(parts[0], parts[1], null));
+            else if (parts.length == 3)
+                return Optional.of(new OAuthCookieValue(parts[0], parts[1], parts[2]));
+
             logger.warn("Decoded state token does not contain the expected number of parts");
             return Optional.empty();
         } catch (RuntimeException e) {

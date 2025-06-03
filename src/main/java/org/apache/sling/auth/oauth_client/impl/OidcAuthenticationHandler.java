@@ -35,6 +35,8 @@ import com.nimbusds.oauth2.sdk.id.ClientID;
 import com.nimbusds.oauth2.sdk.id.Identifier;
 import com.nimbusds.oauth2.sdk.id.Issuer;
 import com.nimbusds.oauth2.sdk.id.State;
+import com.nimbusds.oauth2.sdk.pkce.CodeVerifier;
+import com.nimbusds.openid.connect.sdk.Nonce;
 import com.nimbusds.openid.connect.sdk.OIDCTokenResponseParser;
 import com.nimbusds.openid.connect.sdk.UserInfoRequest;
 import com.nimbusds.openid.connect.sdk.UserInfoResponse;
@@ -50,6 +52,7 @@ import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.auth.oauth_client.spi.LoginCookieManager;
 import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
 import org.apache.sling.auth.oauth_client.spi.UserInfoProcessor;
+import org.apache.sling.commons.crypto.CryptoService;
 import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
 import org.jetbrains.annotations.NotNull;
@@ -75,7 +78,6 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -103,13 +105,17 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
     private final LoginCookieManager loginCookieManager;
 
-    private final String defaultRedirect;
-
     private final String defaultConnectionName;
 
     private final UserInfoProcessor userInfoProcessor;
 
     private final boolean userInfoEnabled;
+
+    private final boolean pkceEnabled;
+
+    private final String[] path;
+
+    private final CryptoService cryptoService;
 
     @ObjectClassDefinition(
             name = "Apache Sling Oidc Authentication Handler",
@@ -120,7 +126,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         @AttributeDefinition(name = "Path",
                 description = "Repository path for which this authentication handler should be used by Sling. If this is " +
                         "empty, the authentication handler will be disabled. By default this is set to \"/\".")
-        String path() default "/";
+        String[] path() default {"/"};
 
         @AttributeDefinition(name = "Sync Handler Configuration Name",
                 description = "Name of Sync Handler Configuration")
@@ -130,13 +136,13 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 description = "Callback URI")
         String callbackUri() default "callbackUri";
 
-        @AttributeDefinition(name = "Default Redirect",
-                description = "Default Redirect")
-        String defaultRedirect() default "/";
-
         @AttributeDefinition(name = "Default Connection Name",
                 description = "Default Connection Name")
         String defaultConnectionName() default "";
+
+        @AttributeDefinition(name = "PKCE Enabled",
+                description = "PKCE Enabled")
+        boolean pkceEnabled() default false;
 
         @AttributeDefinition(name = "UserInfo Enabled",
                 description = "UserInfo Enabled")
@@ -150,7 +156,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                                      @Reference OAuthStateManager stateManager,
                                      Config config,
                                      @Reference(cardinality = ReferenceCardinality.OPTIONAL, policyOption = ReferencePolicyOption.GREEDY) LoginCookieManager loginCookieManager,
-                                     @Reference(policyOption = ReferencePolicyOption.GREEDY) UserInfoProcessor userInfoProcessor
+                                     @Reference(policyOption = ReferencePolicyOption.GREEDY) UserInfoProcessor userInfoProcessor,
+                                     @Reference CryptoService cryptoService
     ) {
 
         this.repository = repository;
@@ -159,11 +166,13 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         this.stateManager = stateManager;
         this.idp = config.idp();
         this.callbackUri = config.callbackUri();
-        this.defaultRedirect = config.defaultRedirect();
         this.loginCookieManager = loginCookieManager;
         this.defaultConnectionName = config.defaultConnectionName();
         this.userInfoProcessor = userInfoProcessor;
         this.userInfoEnabled = config.userInfoEnabled();
+        this.pkceEnabled = config.pkceEnabled();
+        this.path = config.path();
+        this.cryptoService = cryptoService;
 
         logger.debug("activate: registering ExternalIdentityProvider");
         bundleContext.registerService(
@@ -180,70 +189,82 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     public AuthenticationInfo extractCredentials(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response) {
         logger.debug("inside extractCredentials");
 
-        // Check if the request is authenticated by a oidc login token
+        // Check if the request is authenticated by an oidc login token
         AuthenticationInfo authInfo = loginCookieManager.verifyLoginCookie(request);
         if (authInfo != null) {
             // User has a login token
             return authInfo;
         }
 
-        //The request is not authenticated. 
-        // 1. Check if the State cookie match with the state in the request received from the idp
+        //The request is not authenticated.
+        // 1. Extract nonce cookie and state cookie from the request
         StringBuffer requestURL = request.getRequestURL();
-        if ( request.getQueryString() != null )
+        if ( request.getQueryString() != null ) {
             requestURL.append('?').append(request.getQueryString());
-
-        Optional<OAuthState> clientState; //state returned by the idp in the redirect request
-        String authCode; //authorization code returned by the idp in the redirect request
-        Cookie stateCookie;
-        try {
-            AuthorizationResponse authResponse = AuthorizationResponse.parse(new URI(requestURL.toString()));
-            clientState = extractClientState(authResponse);
-            authCode = extractAuthCode(authResponse);
-            stateCookie = extractStateCookie(request);
-        } catch (ParseException | URISyntaxException e) {
-            logger.debug("Failed to parse authorization response");
+        } else {
+            // If there are no query parameters, the request is not for this authentication handler
             return null;
         }
+        State clientState; //state returned by the idp in the redirect request
+        String authCode; //authorization code returned by the idp in the redirect request
+        Cookie oauthCookie;
+        AuthorizationResponse authResponse;
+        try {
+            authResponse = AuthorizationResponse.parse(new URI(requestURL.toString()));
+        } catch (ParseException | URISyntaxException e) {
+            // If we fail parsing the response, we consider the request not for this authentication handler
+            //The request may have some parameters that are not relevant for this authentication handler
+            logger.debug("Failed to parse authorization response: {}", e.getMessage(), e);
+            return null;
+        }
+        clientState = authResponse.getState();
+        if (clientState == null) {
+            // If the state is not present, we consider the request not for this authentication handler
+            logger.debug("No state found in authorization response");
+            return null;
+        }
+        authCode = extractAuthCode(authResponse);
+        oauthCookie = extractCookie(request, OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
+        OAuthCookieValue oAuthCookieValue = new OAuthCookieValue(oauthCookie.getValue(), cryptoService);
 
-        String stateFromAuthServer = clientState.get().perRequestKey();
-        String stateFromClient = stateCookie.getValue();
-        if (!stateFromAuthServer.equals(stateFromClient)) {
+        // Set the redirect Attribute to the original redirect URI
+        request.setAttribute(REDIRECT_ATTRIBUTE_NAME, oAuthCookieValue.redirect());
+
+        //2. Check if the State cookie match with the state in the request received from the idp
+        String stateFromRequest = clientState.getValue();
+        String stateFromCookie = oAuthCookieValue.getState().getValue();
+        if (!stateFromRequest.equals(stateFromCookie)) {
             throw new IllegalStateException("Failed state check: request keys from client and server are not the same");
         }
 
-        // 2. The state cookie is valid, we can exchange an authorization code for an access token
-        Optional<String> redirect = Optional.ofNullable(clientState.get().redirect());
-        // TODO: find a better way to pass it?
-        request.setAttribute(REDIRECT_ATTRIBUTE_NAME,redirect);
+        // 3. The state cookie is valid, we can exchange an authorization code for an access token
 
-        String desiredConnectionName = clientState.get().connectionName();
+        String desiredConnectionName = oAuthCookieValue.connectionName();
         ClientConnection connection = connections.get(desiredConnectionName);
         if (connection == null) {
             throw new IllegalArgumentException(String.format("Requested unknown connection '%s'", desiredConnectionName));
         }
-        ResolvedOidcConnection conn = ResolvedOidcConnection.resolve(connection);
+        ResolvedConnection conn = ResolvedOidcConnection.resolve(connection);
 
-        ClientID clientId = new ClientID(conn.clientId());
-        Secret clientSecret = new Secret(conn.clientSecret());
-        ClientSecretBasic clientCredentials = new ClientSecretBasic(clientId, clientSecret);
+        // 4. Exchange the authorization code for an access token, id token and possibly refresh token
+        TokenResponse tokenResponse = extractTokenResponse(authCode, conn, callbackUri, oAuthCookieValue.codeVerifier());
 
-        // Exchange the authorization code for an access token, id token and possibly refresh token
-        TokenResponse tokenResponse = extractTokenResponse(authCode, conn, clientCredentials, callbackUri);
-        IDTokenClaimsSet claims = validateIdToken(tokenResponse, conn);
-        
-        // Make the request to userInfo
+        // 5. Validate the ID token
+        Nonce nonce = oAuthCookieValue.nonce();
+        IDTokenClaimsSet claims = validateIdToken(tokenResponse, (ResolvedOidcConnection) conn, nonce );
+
+        // 6. Make the request to userInfo
         String subject = claims.getSubject().getValue();
         OidcAuthCredentials credentials = extractCredentials((OidcConnectionImpl) connection, subject, tokenResponse);
-        
-        //create authInfo
+
+        // 7. create authInfo
         authInfo = new AuthenticationInfo(AUTH_TYPE, subject);
         authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS, credentials);
 
         logger.info("User {} authenticated", subject);
         return authInfo;
     }
-    
+
     private @NotNull OidcAuthCredentials extractCredentials(@NotNull OidcConnectionImpl connection, @NotNull String subject, @NotNull TokenResponse tokenResponse) {
         if (userInfoEnabled) {
             HTTPResponse httpResponseUserInfo;
@@ -263,44 +284,71 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 UserInfo userInfo = userInfoResponse.toSuccessResponse().getUserInfo();
 
                 //process credentials
-                return userInfoProcessor.process(userInfo, tokenResponse, subject, idp);
+                return userInfoProcessor.process(userInfo.toJSONObject().toJSONString(), tokenResponse.toSuccessResponse().toJSONObject().toJSONString(), subject, idp);
 
             } catch (IOException | URISyntaxException | ParseException e) {
                 logger.error("Error while processing UserInfo: {}", e.getMessage(), e);
                 throw new RuntimeException(e);
             }
         } else {
-            return userInfoProcessor.process(null, tokenResponse, subject, idp);
+            return userInfoProcessor.process(null, tokenResponse.toSuccessResponse().toSuccessResponse().toJSONObject().toJSONString(), subject, idp);
         }
     }
-    
-    private @NotNull Optional<OAuthState> extractClientState(@NotNull AuthorizationResponse authResponse) {
-        Optional<OAuthState> clientState = stateManager.toOAuthState(authResponse.getState());
-        if (!clientState.isPresent())  {
-            // Do not return null to indicate that the handler cannot extract credentials
-            throw new IllegalStateException("No state found in authorization response");
-        }
-        return clientState;
-    }
-    
+
     private static @NotNull String extractAuthCode(@NotNull AuthorizationResponse authResponse) {
-        AuthorizationCode authCode = authResponse.toSuccessResponse().getAuthorizationCode();
-        if (authCode == null) {
-            throw new IllegalStateException("No authorization code found in authorization response");
+        if (authResponse.indicatesSuccess()) {
+            AuthorizationCode authCode = authResponse.toSuccessResponse().getAuthorizationCode();
+            if (authCode == null) {
+                throw new IllegalStateException("No authorization code found in authorization response");
+            }
+            return authCode.getValue();
         }
-        return authCode.getValue();
+        throw new IllegalStateException(authResponse.toErrorResponse().getErrorObject().getDescription());
     }
-    
-    private static @NotNull TokenResponse extractTokenResponse(@NotNull String authCode, @NotNull ResolvedOidcConnection conn,
-                                                               @NotNull ClientSecretBasic clientCredentials, 
-                                                               @NotNull String callbackUri) {
+
+
+    private @NotNull TokenResponse extractTokenResponse(@NotNull String authCode, @NotNull ResolvedConnection conn,
+                                                               @NotNull String callbackUri, CodeVerifier codeVerifierCookie) {
+        if (pkceEnabled && codeVerifierCookie == null) {
+            //This line of code should never be executed.
+            throw new IllegalStateException("PKCE is enabled but no code verifier cookie found");
+        }
+
         try {
             URI tokenEndpoint = new URI(conn.tokenEndpoint());
-            TokenRequest tokenRequest = new TokenRequest.Builder(
-                    tokenEndpoint,
-                    clientCredentials,
-                    new AuthorizationCodeGrant(new AuthorizationCode(authCode), new URI(callbackUri))
-            ).build();
+
+            ClientID clientId = new ClientID(conn.clientId());
+            AuthorizationCode code = new AuthorizationCode(authCode);
+
+            TokenRequest tokenRequest;
+            if (pkceEnabled && conn.clientSecret() != null) {
+                // Make the token request, with PKCE
+                Secret clientSecret = new Secret(conn.clientSecret());
+                ClientSecretBasic clientCredentials = new ClientSecretBasic(clientId, clientSecret);
+
+                tokenRequest = new TokenRequest.Builder(
+                        tokenEndpoint,
+                        clientCredentials,
+                        new AuthorizationCodeGrant(code, new URI(callbackUri), codeVerifierCookie)
+                ).build();
+
+            } else if (pkceEnabled) {
+                tokenRequest = new TokenRequest.Builder(
+                        tokenEndpoint,
+                        clientId,
+                        new AuthorizationCodeGrant(code, new URI(callbackUri), new CodeVerifier(codeVerifierCookie.getValue()))
+                ).build();
+            } else {
+                Secret clientSecret = new Secret(conn.clientSecret());
+
+                ClientSecretBasic clientCredentials = new ClientSecretBasic(clientId, clientSecret);
+
+                tokenRequest = new TokenRequest.Builder(
+                        tokenEndpoint,
+                        clientCredentials,
+                        new AuthorizationCodeGrant(code, new URI(callbackUri))
+                ).build();
+            }
 
             HTTPRequest httpRequest = tokenRequest.toHTTPRequest();
             // GitHub requires an explicitly set Accept header, otherwise the response is url encoded
@@ -329,17 +377,17 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         }
 
     }
-    private static @NotNull Cookie extractStateCookie(@NotNull HttpServletRequest request) {
+    private static @NotNull Cookie extractCookie(@NotNull HttpServletRequest request, String cookieName) {
         Cookie[] cookies = request.getCookies();
         if (cookies == null) {
             throw new IllegalStateException("Failed state check: No cookies found");
         }
         for (Cookie cookie : cookies) {
-            if (OAuthStateManager.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName())) {
+            if (cookieName.equals(cookie.getName())) {
                 return cookie;
             }
         }
-        throw new IllegalStateException(String.format("Failed state check: No request cookie named %s found", OAuthStateManager.COOKIE_NAME_REQUEST_KEY));
+        throw new IllegalStateException(String.format("Failed state check: No request cookie named %s found", cookieName));
     }
 
     /**
@@ -358,8 +406,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
      * @param conn         The resolved OIDC connection.
      * @return The validated ID token claims set.
      */
-    private static @NotNull IDTokenClaimsSet validateIdToken(@NotNull TokenResponse tokenResponse, 
-                                                             @NotNull ResolvedOidcConnection conn) {
+    private static @NotNull IDTokenClaimsSet validateIdToken(@NotNull TokenResponse tokenResponse,
+                                                             @NotNull ResolvedOidcConnection conn, Nonce nonce) {
         Issuer issuer = new Issuer(conn.issuer());
         ClientID clientID = new ClientID(conn.clientId());
         try {
@@ -367,7 +415,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             URL jwkSetURL = conn.jwkSetURL().toURL();
 
             IDTokenValidator validator = new IDTokenValidator(issuer, clientID, jwsAlg, jwkSetURL);
-            return validator.validate(tokenResponse.toSuccessResponse().getTokens().toOIDCTokens().getIDToken(), null);
+            return validator.validate(tokenResponse.toSuccessResponse().getTokens().toOIDCTokens().getIDToken(), nonce);
         } catch (BadJOSEException | JOSEException | MalformedURLException e) {
             logger.error("Failed to validate token: {}", e.getMessage(), e);
             throw new RuntimeException(e.getMessage());
@@ -395,6 +443,13 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     @Override
     public boolean requestCredentials(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response) {
         logger.debug("inside requestCredentials");
+
+        AuthenticationInfo authInfo = loginCookieManager.verifyLoginCookie(request);
+        if (authInfo != null) {
+            // User has a valid sling login token
+            return true;
+        }
+
         String desiredConnectionName = request.getParameter("c");
         if ( desiredConnectionName == null ) {
             logger.debug("Missing mandatory request parameter 'c' using default connection");
@@ -409,6 +464,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             }
 
             var redirect = getAuthenticationRequestUri(connection, request, URI.create(callbackUri));
+            // add the cookie to the response
             response.addCookie(redirect.cookie());
             response.sendRedirect(redirect.uri().toString());
             return true;
@@ -420,19 +476,24 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
     private @NotNull RedirectTarget getAuthenticationRequestUri(@NotNull ClientConnection connection,
                                                                 @NotNull HttpServletRequest request,
-                                                                @NotNull URI redirectUri) {
+                                                                @NotNull URI callbackUri) {
 
-        ResolvedOidcConnection conn = ResolvedOidcConnection.resolve(connection);
+        ResolvedConnection conn = ResolvedOidcConnection.resolve(connection);
 
         // The client ID provisioned by the OpenID provider when
-        // the client was registered
-        ClientID clientID = new ClientID(conn.clientId());
-        
-        String redirect = request.getParameter(OAuthStateManager.PARAMETER_NAME_REDIRECT);
-        String perRequestKey = new Identifier().getValue();
-        State state = stateManager.toNimbusState(new OAuthState(perRequestKey, connection.name(), redirect));
+        // the client was registered is stored in the connection.
 
-        return RedirectHelper.buildRedirectTarget(clientID, conn.authorizationEndpoint(), conn.scopes(), conn.additionalAuthorizationParameters(), state, perRequestKey, redirectUri);
+        String redirect = request.getRequestURI();
+        String perRequestKey = new Identifier().getValue();
+        Nonce nonce = new Nonce(new Identifier().getValue());
+        CodeVerifier codeVerifier = null;
+        if (pkceEnabled) {
+            codeVerifier = new CodeVerifier();
+        }
+
+        OAuthCookieValue oAuthCookieValue = new OAuthCookieValue(perRequestKey, connection.name(), redirect, nonce, codeVerifier);
+
+        return RedirectHelper.buildRedirectTarget(path, callbackUri, conn, oAuthCookieValue, cryptoService);
     }
 
     @Override
@@ -451,6 +512,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         if (loginCookieManager.getLoginCookie(request) !=null) {
             // A valid login cookie has been sent
             // According to AuthenticationFeedbackHandler javadoc we send because we did not send a redirect to the user
+            deleteAuthenticationCookies(request.getRequestURI(), response);
             return false;
         }
 
@@ -466,19 +528,28 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 }
             }
 
+            String redirectUrl = (String)request.getAttribute(REDIRECT_ATTRIBUTE_NAME);
+            deleteAuthenticationCookies(request.getRequestURL().toString(), response);
             try {
-                Object redirect = request.getAttribute(REDIRECT_ATTRIBUTE_NAME);
-                if (redirect instanceof String) {
-                    response.sendRedirect(redirect.toString());
-                } else {
-                    response.sendRedirect(defaultRedirect);
-                }
+                response.sendRedirect(redirectUrl);
             } catch (IOException e) {
-                logger.error("Error while redirecting to default redirect: {}", e.getMessage(), e);
+                logger.error("Error while redirecting to redirect url '{}': {}", redirectUrl, e.getMessage(), e);
                 throw new RuntimeException(e);
             }
         }
         return true;
     }
 
+    private void deleteAuthenticationCookies(@NotNull String requestUri, @NotNull HttpServletResponse response) {
+        deleteCookie(requestUri, response, OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
+    }
+
+    private void deleteCookie(@NotNull String requestUri, @NotNull HttpServletResponse response, @NotNull String cookieName) {
+        Cookie cookie = new Cookie(cookieName, null);
+        cookie.setMaxAge(0); // Marks the cookie for deletion
+        cookie.setHttpOnly(true);
+        cookie.setSecure(true);
+        cookie.setPath(RedirectHelper.findLongestPathMatching(path, requestUri));
+        response.addCookie(cookie);
+    }
 }

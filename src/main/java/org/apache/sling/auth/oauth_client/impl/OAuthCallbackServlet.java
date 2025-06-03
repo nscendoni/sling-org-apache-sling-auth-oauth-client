@@ -18,6 +18,7 @@ package org.apache.sling.auth.oauth_client.impl;
 
 import static org.osgi.service.component.annotations.ReferencePolicyOption.GREEDY;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
@@ -39,6 +40,7 @@ import org.apache.sling.api.SlingHttpServletResponse;
 import org.apache.sling.api.servlets.SlingAllMethodsServlet;
 import org.apache.sling.auth.core.AuthConstants;
 import org.apache.sling.auth.oauth_client.ClientConnection;
+import org.apache.sling.commons.crypto.CryptoService;
 import org.apache.sling.servlets.annotations.SlingServletPaths;
 import org.jetbrains.annotations.NotNull;
 import org.osgi.service.component.annotations.Activate;
@@ -77,6 +79,7 @@ public class OAuthCallbackServlet extends SlingAllMethodsServlet {
     private final Map<String, ClientConnection> connections;
     private final OAuthTokenStore tokenStore;
     private final OAuthStateManager stateManager;
+    private final CryptoService cryptoService;
 
     static String getCallbackUri(HttpServletRequest request) {
         String portFragment = "";
@@ -109,62 +112,64 @@ public class OAuthCallbackServlet extends SlingAllMethodsServlet {
     @Activate
     public OAuthCallbackServlet(@Reference(policyOption = GREEDY) List<ClientConnection> connections, 
             @Reference OAuthTokenStore tokenStore,
-            @Reference OAuthStateManager stateManager) {
+            @Reference OAuthStateManager stateManager,
+            @Reference CryptoService cryptoService) {
         this.connections = connections.stream()
                 .collect(Collectors.toMap( ClientConnection::name, Function.identity()));
         this.tokenStore = tokenStore;
         this.stateManager = stateManager;
+        this.cryptoService = cryptoService;
     }
 
     @Override
     protected void doGet(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response) throws ServletException {
 
-        StringBuffer requestURL = request.getRequestURL();
-        if ( request.getQueryString() != null )
-            requestURL.append('?').append(request.getQueryString());
+        // Retrieve the cookie with persisted data for oauth
+        Cookie stateCookie = request.getCookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
+        if (stateCookie == null) {
+            logger.debug("Failed state check: No request cookie named '{}' found", OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
+            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            return;
+        }
 
-        AuthorizationResponse authResponse;
-        Optional<OAuthState>  clientState;
-        Cookie stateCookie;
+        OAuthCookieValue oAuthCookieValue;
         try {
-            authResponse = AuthorizationResponse.parse(new URI(requestURL.toString()));
-            
-            clientState = stateManager.toOAuthState(authResponse.getState());
-            if (!clientState.isPresent())  {
-                logger.debug("Failed state check: no state found in authorization response");
-                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                return;
-            }
-            
-            stateCookie = request.getCookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
-            if (stateCookie == null) {
-                logger.debug("Failed state check: No request cookie named '{}' found", OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
-                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                return;
-            }
+            oAuthCookieValue = new OAuthCookieValue(stateCookie.getValue(), cryptoService);
+        } catch (RuntimeException e) {
+            logger.debug("Failed to decode state cookie", e);
+            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            return;
+        }
 
+        // Retrieve the state from the request
+        AuthorizationResponse authResponse;
+        try {
+            authResponse = AuthorizationResponse.parse(new URI(getRequestURL(request)));
+
+            if (!authResponse.indicatesSuccess()) {
+                AuthorizationErrorResponse errorResponse = authResponse.toErrorResponse();
+                throw new OAuthCallbackException("Authentication failed", new RuntimeException(toErrorMessage("Error in authentication response", errorResponse)));
+            }
         } catch (ParseException | URISyntaxException e) {
             logger.debug("Failed to parse authorization response", e);
             response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             return;
         }
 
-        try {            
-            String stateFromAuthServer = clientState.get().perRequestKey();
-            String stateFromClient = stateCookie.getValue();
+        try {
+            // Retrieve the state from the request
+            String stateFromAuthServer = authResponse.getState().getValue();
+
+            // Read the state from the cookie
+            String stateFromClient = oAuthCookieValue.getState().getValue();
+
+            // Compare state from the client (read from the cookie) and the server (read from the request)
             if (!stateFromAuthServer.equals(stateFromClient)) {
                 throw new IllegalStateException("Failed state check: request keys from client and server are not the same");
             }
-            if (!authResponse.indicatesSuccess()) {
-                AuthorizationErrorResponse errorResponse = authResponse.toErrorResponse();
-                throw new OAuthCallbackException("Authentication failed", new RuntimeException(toErrorMessage("Error in authentication response", errorResponse)));
-            }
 
-            Optional<String> redirect = Optional.ofNullable(clientState.get().redirect());
-            
-            String authCode = authResponse.toSuccessResponse().getAuthorizationCode().getValue();
-            
-            String desiredConnectionName = clientState.get().connectionName();
+            // Retrieve the connection name from the cookie and resolve the connection
+            String desiredConnectionName = oAuthCookieValue.connectionName();
             if (desiredConnectionName.isEmpty()) {
                 throw new IllegalArgumentException("No connection found in clientState");
             }
@@ -172,14 +177,22 @@ public class OAuthCallbackServlet extends SlingAllMethodsServlet {
             if (connection == null) {
                 throw new IllegalArgumentException(String.format("Requested unknown connection '%s'", desiredConnectionName));
             }
-            ResolvedOAuthConnection conn = ResolvedOAuthConnection.resolve(connection);
+            ResolvedConnection conn = ResolvedOAuthConnection.resolve(connection);
 
             ClientID clientId = new ClientID(conn.clientId());
-            Secret clientSecret = new Secret(conn.clientSecret());
+            
+            String clientSecretString = conn.clientSecret();
+            if (clientSecretString == null) {
+                throw new IllegalArgumentException("No client secret found in connection");
+            }
+            Secret clientSecret = new Secret(clientSecretString);
             ClientSecretBasic clientCredentials = new ClientSecretBasic(clientId, clientSecret);
-            
+
+            // Retrieve the authorization Code from request
+            String authCode = authResponse.toSuccessResponse().getAuthorizationCode().getValue();
             AuthorizationCode code = new AuthorizationCode(authCode);
-            
+
+            // Prepare the request to retrieve access token from the authorization server
             URI tokenEndpoint = new URI(conn.tokenEndpoint());
             TokenRequest tokenRequest = new TokenRequest.Builder(
                 tokenEndpoint,
@@ -203,11 +216,7 @@ public class OAuthCallbackServlet extends SlingAllMethodsServlet {
             
             tokenStore.persistTokens(connection, request.getResourceResolver(), tokens);
 
-            if (redirect.isEmpty()) {
-                response.setStatus(HttpServletResponse.SC_NO_CONTENT);
-            } else {
-                response.sendRedirect(URLDecoder.decode(redirect.get(), StandardCharsets.UTF_8));
-            }
+            handleRedirect(oAuthCookieValue, response);
 
         } catch (IllegalStateException e) {
             throw new OAuthCallbackException("State check failed", e);
@@ -219,6 +228,23 @@ public class OAuthCallbackServlet extends SlingAllMethodsServlet {
             throw e;
         } catch (Exception e) {
             throw new OAuthCallbackException("Unknown error", e);
+        }
+    }
+    
+    private static @NotNull String getRequestURL(@NotNull SlingHttpServletRequest request) {
+        StringBuffer requestURL = request.getRequestURL();
+        if (request.getQueryString() != null) {
+            requestURL.append('?').append(request.getQueryString());
+        }
+        return requestURL.toString();
+    }
+    
+    private static void handleRedirect(@NotNull OAuthCookieValue clientState, @NotNull HttpServletResponse response) throws IOException {
+        Optional<String> redirect = Optional.ofNullable(clientState.redirect());
+        if (redirect.isEmpty()) {
+            response.setStatus(HttpServletResponse.SC_NO_CONTENT);
+        } else {
+            response.sendRedirect(URLDecoder.decode(redirect.get(), StandardCharsets.UTF_8));
         }
     }
 }
