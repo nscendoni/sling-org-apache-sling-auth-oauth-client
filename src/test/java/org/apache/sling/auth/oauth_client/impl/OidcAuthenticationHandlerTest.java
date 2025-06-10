@@ -55,7 +55,6 @@ import org.apache.sling.auth.oauth_client.spi.LoginCookieManager;
 import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
 import org.apache.sling.auth.oauth_client.spi.UserInfoProcessor;
 import org.apache.sling.commons.crypto.CryptoService;
-import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
 import org.apache.sling.testing.mock.osgi.MockOsgi;
 import org.apache.sling.testing.mock.sling.servlet.MockSlingHttpServletRequest;
@@ -76,10 +75,8 @@ class OidcAuthenticationHandlerTest {
 
     private static final String MOCK_OIDC_PARAM = "mock-oidc-param";
     private static final String ISSUER = "myIssuer";
-    private SlingRepository repository;
     private BundleContext bundleContext;
     private List<ClientConnection> connections;
-    private OAuthStateManager oauthStateManager;
     private OidcAuthenticationHandler oidcAuthenticationHandler;
 
     private OidcAuthenticationHandler.Config config;
@@ -96,7 +93,6 @@ class OidcAuthenticationHandlerTest {
         tokenEndpointServer = createHttpServer();
         idpServer = createHttpServer();
 
-        repository = mock(SlingRepository.class);
         bundleContext = MockOsgi.newBundleContext();
         config = mock(OidcAuthenticationHandler.Config.class);
         when(config.idp()).thenReturn("myIdP");
@@ -112,8 +108,6 @@ class OidcAuthenticationHandlerTest {
         when(config.pkceEnabled()).thenReturn(false);
         connections = new ArrayList<>();
         connections.add(MockOidcConnection.DEFAULT_CONNECTION);
-
-        oauthStateManager = new StubOAuthStateManager();
 
         request = mock(HttpServletRequest.class);
 
@@ -798,14 +792,7 @@ class OidcAuthenticationHandlerTest {
 
     private void createOidcAuthenticationHandler() {
         oidcAuthenticationHandler = new OidcAuthenticationHandler(
-                repository,
-                bundleContext,
-                connections,
-                oauthStateManager,
-                config,
-                loginCookieManager,
-                userInfoProcessor,
-                cryptoService);
+                bundleContext, connections, config, loginCookieManager, userInfoProcessor, cryptoService);
     }
 
     private HttpServer createHttpServer() throws IOException {

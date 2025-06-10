@@ -81,7 +81,7 @@ class SlingLoginCookieManagerTest {
         OidcAuthCredentials creds = mock(OidcAuthCredentials.class);
         when(creds.getUserId()).thenReturn("testUser");
 
-        slingLoginCookieManager.setLoginCookie(request, response, repository, creds);
+        slingLoginCookieManager.setLoginCookie(request, response, creds);
 
         Cookie cookie = parseSetCookieHeader(response.getHeader("Set-Cookie"));
         assertNotNull(cookie);
