@@ -30,7 +30,7 @@ import org.apache.sling.auth.core.spi.AuthenticationInfo;
 import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
 import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
-import org.apache.sling.testing.mock.osgi.MockOsgi;
+import org.apache.sling.testing.mock.osgi.junit.OsgiContext;
 import org.apache.sling.testing.mock.sling.servlet.MockSlingHttpServletRequest;
 import org.apache.sling.testing.mock.sling.servlet.MockSlingHttpServletResponse;
 import org.jetbrains.annotations.NotNull;
@@ -51,7 +51,7 @@ class SlingLoginCookieManagerTest {
 
     private static final String COOKIE_NAME = "sling.oidcauth";
 
-    private final BundleContext bundleContext = MockOsgi.newBundleContext();
+    private final BundleContext bundleContext = new OsgiContext().bundleContext();
     private final MockSlingHttpServletRequest request = new MockSlingHttpServletRequest(bundleContext);
     private final MockSlingHttpServletResponse response = new MockSlingHttpServletResponse();
     private final SlingRepository repository = mock(SlingRepository.class);
