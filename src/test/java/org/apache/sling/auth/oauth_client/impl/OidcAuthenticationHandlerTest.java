@@ -57,12 +57,14 @@ import org.apache.sling.auth.oauth_client.spi.UserInfoProcessor;
 import org.apache.sling.commons.crypto.CryptoService;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
 import org.apache.sling.testing.mock.osgi.junit.OsgiContext;
+import org.apache.sling.testing.mock.osgi.junit5.OsgiContextExtension;
 import org.apache.sling.testing.mock.sling.servlet.MockSlingHttpServletRequest;
 import org.apache.sling.testing.mock.sling.servlet.MockSlingHttpServletResponse;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.osgi.framework.BundleContext;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -71,10 +73,12 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+@ExtendWith(OsgiContextExtension.class)
 class OidcAuthenticationHandlerTest {
 
     private static final String MOCK_OIDC_PARAM = "mock-oidc-param";
     private static final String ISSUER = "myIssuer";
+    private OsgiContext osgiContext = new OsgiContext();
     private BundleContext bundleContext;
     private List<ClientConnection> connections;
     private OidcAuthenticationHandler oidcAuthenticationHandler;
@@ -93,7 +97,7 @@ class OidcAuthenticationHandlerTest {
         tokenEndpointServer = createHttpServer();
         idpServer = createHttpServer();
 
-        bundleContext = new OsgiContext().bundleContext();
+        bundleContext = osgiContext.bundleContext();
         config = mock(OidcAuthenticationHandler.Config.class);
         when(config.idp()).thenReturn("myIdP");
         when(config.path()).thenReturn(new String[] {"/"});

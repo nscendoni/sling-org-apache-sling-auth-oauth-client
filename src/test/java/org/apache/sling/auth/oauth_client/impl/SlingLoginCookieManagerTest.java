@@ -28,16 +28,15 @@ import java.util.Base64;
 
 import org.apache.sling.auth.core.spi.AuthenticationInfo;
 import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
-import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
 import org.apache.sling.testing.mock.osgi.junit.OsgiContext;
+import org.apache.sling.testing.mock.osgi.junit5.OsgiContextExtension;
 import org.apache.sling.testing.mock.sling.servlet.MockSlingHttpServletRequest;
 import org.apache.sling.testing.mock.sling.servlet.MockSlingHttpServletResponse;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-import org.osgi.framework.BundleContext;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -47,33 +46,33 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+@ExtendWith(OsgiContextExtension.class)
 class SlingLoginCookieManagerTest {
 
     private static final String COOKIE_NAME = "sling.oidcauth";
 
-    private final BundleContext bundleContext = new OsgiContext().bundleContext();
-    private final MockSlingHttpServletRequest request = new MockSlingHttpServletRequest(bundleContext);
+    private final OsgiContext osgiContext = new OsgiContext();
+    private MockSlingHttpServletRequest request;
     private final MockSlingHttpServletResponse response = new MockSlingHttpServletResponse();
-    private final SlingRepository repository = mock(SlingRepository.class);
     private SlingLoginCookieManager slingLoginCookieManager;
-    private @TempDir File tempFolder;
 
     @BeforeEach
     void setup() throws NoSuchAlgorithmException, InvalidKeyException {
+
+        request = new MockSlingHttpServletRequest(osgiContext.bundleContext());
+
         SlingLoginCookieManager.SlingLoginCookieManagerConfig config =
                 mock(SlingLoginCookieManager.SlingLoginCookieManagerConfig.class);
 
-        File tokenFile = new File(tempFolder, "cookie-tokens.bin");
+        File tokenFile = osgiContext.bundleContext().getDataFile("cookie-tokens.bin");
 
         when(config.tokenFile()).thenReturn(tokenFile.getAbsolutePath());
         when(config.form_token_fastseed()).thenReturn(false);
         when(config.sessionTimeout()).thenReturn(8 * 60 * 60 * 1000L);
         when(config.cookieName()).thenReturn(COOKIE_NAME);
 
-        BundleContext bundleContext = mock(BundleContext.class);
-        when(bundleContext.getDataFile("cookie-tokens")).thenReturn(tokenFile);
 
-        slingLoginCookieManager = new SlingLoginCookieManager(config, bundleContext);
+        slingLoginCookieManager = new SlingLoginCookieManager(config, osgiContext.bundleContext());
     }
 
     @Test
