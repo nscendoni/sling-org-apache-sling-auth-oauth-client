@@ -71,7 +71,6 @@ class SlingLoginCookieManagerTest {
         when(config.sessionTimeout()).thenReturn(8 * 60 * 60 * 1000L);
         when(config.cookieName()).thenReturn(COOKIE_NAME);
 
-
         slingLoginCookieManager = new SlingLoginCookieManager(config, osgiContext.bundleContext());
     }
 
