@@ -79,7 +79,6 @@ public class OAuthCallbackServlet extends SlingAllMethodsServlet {
 
     private final Map<String, ClientConnection> connections;
     private final OAuthTokenStore tokenStore;
-    private final OAuthStateManager stateManager;
     private final CryptoService cryptoService;
 
     static String getCallbackUri(HttpServletRequest request) {
@@ -110,11 +109,9 @@ public class OAuthCallbackServlet extends SlingAllMethodsServlet {
     public OAuthCallbackServlet(
             @Reference(policyOption = GREEDY) List<ClientConnection> connections,
             @Reference OAuthTokenStore tokenStore,
-            @Reference OAuthStateManager stateManager,
             @Reference CryptoService cryptoService) {
         this.connections = connections.stream().collect(Collectors.toMap(ClientConnection::name, Function.identity()));
         this.tokenStore = tokenStore;
-        this.stateManager = stateManager;
         this.cryptoService = cryptoService;
     }
 
@@ -123,11 +120,10 @@ public class OAuthCallbackServlet extends SlingAllMethodsServlet {
             throws ServletException {
 
         // Retrieve the cookie with persisted data for oauth
-        Cookie stateCookie = request.getCookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
+        Cookie stateCookie = request.getCookie(OAuthCookieValue.COOKIE_NAME_REQUEST_KEY);
         if (stateCookie == null) {
             logger.debug(
-                    "Failed state check: No request cookie named '{}' found",
-                    OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
+                    "Failed state check: No request cookie named '{}' found", OAuthCookieValue.COOKIE_NAME_REQUEST_KEY);
             response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             return;
         }
