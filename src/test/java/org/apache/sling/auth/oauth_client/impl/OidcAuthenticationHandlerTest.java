@@ -110,6 +110,7 @@ class OidcAuthenticationHandlerTest {
 
         when(config.userInfoEnabled()).thenReturn(true);
         when(config.pkceEnabled()).thenReturn(false);
+        when(config.jwtAlgorithm()).thenReturn("RS256");
         connections = new ArrayList<>();
         connections.add(MockOidcConnection.DEFAULT_CONNECTION);
 
@@ -1078,5 +1079,68 @@ class OidcAuthenticationHandlerTest {
         assertEquals(
                 "Unable to resolve ClientConnection (name=test) of type org.apache.sling.auth.oauth_client.impl.OAuthConnectionImpl",
                 exception.getMessage());
+    }
+
+    @Test
+    void testJwtAlgorithmConfiguration() {
+        // Test with valid algorithm
+        when(config.jwtAlgorithm()).thenReturn("RS256");
+        createOidcAuthenticationHandler();
+        assertNotNull(oidcAuthenticationHandler);
+
+        // Test with another valid algorithm
+        when(config.jwtAlgorithm()).thenReturn("ES256");
+        createOidcAuthenticationHandler();
+        assertNotNull(oidcAuthenticationHandler);
+
+        // Test with HMAC algorithm
+        when(config.jwtAlgorithm()).thenReturn("HS256");
+        createOidcAuthenticationHandler();
+        assertNotNull(oidcAuthenticationHandler);
+    }
+
+    @Test
+    void testInvalidJwtAlgorithmConfiguration() {
+        // Test with invalid algorithm (this can happen when configuration is applied via JSON)
+        when(config.jwtAlgorithm()).thenReturn("INVALID_ALG");
+
+        IllegalArgumentException exception =
+                assertThrows(IllegalArgumentException.class, this::createOidcAuthenticationHandler);
+        assertTrue(exception.getMessage().contains("Invalid JWT algorithm: INVALID_ALG"));
+        assertTrue(
+                exception
+                        .getMessage()
+                        .contains(
+                                "Must be one of: RS256, RS384, RS512, ES256, ES384, ES512, PS256, PS384, PS512, HS256, HS384, HS512"));
+    }
+
+    @Test
+    void testJwtAlgorithmValidationWithNullValue() {
+        // Test with null algorithm (this can happen when configuration is applied via JSON)
+        when(config.jwtAlgorithm()).thenReturn(null);
+
+        IllegalArgumentException exception =
+                assertThrows(IllegalArgumentException.class, this::createOidcAuthenticationHandler);
+        assertTrue(exception.getMessage().contains("Invalid JWT algorithm: null"));
+    }
+
+    @Test
+    void testJwtAlgorithmValidationWithEmptyValue() {
+        // Test with empty algorithm (this can happen when configuration is applied via JSON)
+        when(config.jwtAlgorithm()).thenReturn("");
+
+        IllegalArgumentException exception =
+                assertThrows(IllegalArgumentException.class, this::createOidcAuthenticationHandler);
+        assertTrue(exception.getMessage().contains("Invalid JWT algorithm: "));
+    }
+
+    @Test
+    void testJwtAlgorithmValidationCaseSensitive() {
+        // Test with lowercase algorithm (validation should be case-sensitive)
+        when(config.jwtAlgorithm()).thenReturn("rs256");
+
+        IllegalArgumentException exception =
+                assertThrows(IllegalArgumentException.class, this::createOidcAuthenticationHandler);
+        assertTrue(exception.getMessage().contains("Invalid JWT algorithm: rs256"));
     }
 }

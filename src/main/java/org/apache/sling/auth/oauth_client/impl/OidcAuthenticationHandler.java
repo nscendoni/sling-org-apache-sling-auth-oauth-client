@@ -79,6 +79,7 @@ import org.osgi.service.component.annotations.ReferencePolicyOption;
 import org.osgi.service.metatype.annotations.AttributeDefinition;
 import org.osgi.service.metatype.annotations.Designate;
 import org.osgi.service.metatype.annotations.ObjectClassDefinition;
+import org.osgi.service.metatype.annotations.Option;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -111,6 +112,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
     private final CryptoService cryptoService;
 
+    private final JWSAlgorithm jwtAlgorithm;
+
     @ObjectClassDefinition(
             name = "Apache Sling Oidc Authentication Handler",
             description = "Apache Sling Oidc Authentication Handler Service")
@@ -138,6 +141,59 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
         @AttributeDefinition(name = "UserInfo Enabled", description = "UserInfo Enabled")
         boolean userInfoEnabled() default true;
+
+        @AttributeDefinition(
+                name = "JWT Signature Algorithm",
+                description = "Algorithm used for JWT signature validation",
+                options = {
+                    @Option(label = "RS256 (RSA with SHA-256)", value = "RS256"),
+                    @Option(label = "RS384 (RSA with SHA-384)", value = "RS384"),
+                    @Option(label = "RS512 (RSA with SHA-512)", value = "RS512"),
+                    @Option(label = "ES256 (ECDSA with SHA-256)", value = "ES256"),
+                    @Option(label = "ES384 (ECDSA with SHA-384)", value = "ES384"),
+                    @Option(label = "ES512 (ECDSA with SHA-512)", value = "ES512"),
+                    @Option(label = "PS256 (RSASSA-PSS with SHA-256)", value = "PS256"),
+                    @Option(label = "PS384 (RSASSA-PSS with SHA-384)", value = "PS384"),
+                    @Option(label = "PS512 (RSASSA-PSS with SHA-512)", value = "PS512"),
+                    @Option(label = "HS256 (HMAC with SHA-256)", value = "HS256"),
+                    @Option(label = "HS384 (HMAC with SHA-384)", value = "HS384"),
+                    @Option(label = "HS512 (HMAC with SHA-512)", value = "HS512")
+                })
+        String jwtAlgorithm() default "RS256";
+    }
+
+    private static JWSAlgorithm parseJwtAlgorithm(String algorithmString) {
+        // Validate against allowed algorithms, even when configuration is applied via JSON
+        final String[] allowedAlgorithms = {
+            "RS256", "RS384", "RS512", // RSA algorithms
+            "ES256", "ES384", "ES512", // ECDSA algorithms
+            "PS256", "PS384", "PS512", // RSASSA-PSS algorithms
+            "HS256", "HS384", "HS512" // HMAC algorithms
+        };
+
+        boolean isValid = false;
+        for (String allowed : allowedAlgorithms) {
+            if (allowed.equals(algorithmString)) {
+                isValid = true;
+                break;
+            }
+        }
+
+        if (!isValid) {
+            logger.error(
+                    "Invalid JWT algorithm configured: {}. Allowed algorithms: {}",
+                    algorithmString,
+                    String.join(", ", allowedAlgorithms));
+            throw new IllegalArgumentException("Invalid JWT algorithm: " + algorithmString + ". Must be one of: "
+                    + String.join(", ", allowedAlgorithms));
+        }
+
+        try {
+            return JWSAlgorithm.parse(algorithmString);
+        } catch (IllegalArgumentException e) {
+            logger.error("Failed to parse JWT algorithm: {}", algorithmString, e);
+            throw new RuntimeException("Failed to parse JWT algorithm: " + algorithmString, e);
+        }
     }
 
     @Activate
@@ -159,6 +215,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         this.pkceEnabled = config.pkceEnabled();
         this.path = config.path();
         this.cryptoService = cryptoService;
+        this.jwtAlgorithm = parseJwtAlgorithm(config.jwtAlgorithm());
 
         logger.debug("activate: registering ExternalIdentityProvider");
         bundleContext.registerService(
@@ -421,12 +478,12 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
      * @param conn         The resolved OIDC connection.
      * @return The validated ID token claims set.
      */
-    private static @NotNull IDTokenClaimsSet validateIdToken(
+    private @NotNull IDTokenClaimsSet validateIdToken(
             @NotNull TokenResponse tokenResponse, @NotNull ResolvedOidcConnection conn, Nonce nonce) {
         Issuer issuer = new Issuer(conn.issuer());
         ClientID clientID = new ClientID(conn.clientId());
         try {
-            JWSAlgorithm jwsAlg = JWSAlgorithm.RS256; // TODO: Read from config
+            JWSAlgorithm jwsAlg = jwtAlgorithm;
             URL jwkSetURL = conn.jwkSetURL().toURL();
 
             IDTokenValidator validator = new IDTokenValidator(issuer, clientID, jwsAlg, jwkSetURL);
