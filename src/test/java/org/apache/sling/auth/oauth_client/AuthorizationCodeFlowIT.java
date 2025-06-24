@@ -198,14 +198,20 @@ class AuthorizationCodeFlowIT {
         configPidsToCleanup.add(sling.adaptTo(OsgiConsoleClient.class)
                 .editConfiguration(
                         OAUTH_CONFIG_PID + ".keycloak",
-                        OIDC_CONFIG_PID,
+                        OAUTH_CONFIG_PID,
                         Map.of(
-                                "name", oidcConnectionName,
-                                "baseUrl", "http://localhost:" + keycloakPort + "/realms/sling",
-                                "clientId", "oidc-test",
-                                "clientSecret", "wM2XIbxBTLJAac2rJSuHyKaoP8IWvSwJ",
-                                "scopes", "openid")));
-
+                                "name",
+                                oidcConnectionName,
+                                "tokenEndpoint",
+                                "http://localhost:" + keycloakPort + "/realms/sling/protocol/openid-connect/token",
+                                "authorizationEndpoint",
+                                "http://localhost:" + keycloakPort + "/realms/sling/protocol/openid-connect/auth",
+                                "clientId",
+                                "oidc-test",
+                                "clientSecret",
+                                "wM2XIbxBTLJAac2rJSuHyKaoP8IWvSwJ",
+                                "scopes",
+                                "openid")));
         // clean up any existing tokens
         String userPath = getUserPath(sling, sling.getUser());
         sling.deletePath(userPath + "/oauth-tokens/" + oidcConnectionName, 200);
