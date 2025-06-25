@@ -25,7 +25,8 @@ import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * An OAuth connection that has all configuration parameters materialised
+ * An OAuth connection that has all configuration parameters materialised.
+ * Remark that it can be an OAuth Connection, or an OpenID Connect (OIDC) Connection.
  *
  * <p>Serves as an internal abstraction over the client-facing {@link ClientConnection} and its implementations.</p>
  */
@@ -60,6 +61,16 @@ class ResolvedOAuthConnection extends ResolvedConnection {
                     oidcConnection.clientSecret(),
                     Arrays.asList(oidcConnection.scopes()),
                     Arrays.asList(oidcConnection.additionalAuthorizationParameters()));
+        } else if (connection instanceof OAuthConnectionImpl) {
+            OAuthConnectionImpl oauthConnection = (OAuthConnectionImpl) connection;
+            return new ResolvedOAuthConnection(
+                    connection.name(),
+                    oauthConnection.authorizationEndpoint(),
+                    oauthConnection.tokenEndpoint(),
+                    oauthConnection.clientId(),
+                    oauthConnection.clientSecret(),
+                    Arrays.asList(oauthConnection.scopes()),
+                    Arrays.asList(oauthConnection.additionalAuthorizationParameters()));
         }
         throw new IllegalArgumentException(String.format(
                 "Unable to resolve %s (name=%s) of type %s",
