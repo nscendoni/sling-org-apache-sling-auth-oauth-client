@@ -18,8 +18,11 @@
  */
 package org.apache.sling.auth.oauth_client.impl;
 
+import java.util.List;
+
 import com.nimbusds.oauth2.sdk.ParseException;
 import com.nimbusds.oauth2.sdk.TokenResponse;
+import com.nimbusds.openid.connect.sdk.OIDCTokenResponse;
 import com.nimbusds.openid.connect.sdk.claims.UserInfo;
 import net.minidev.json.JSONArray;
 import net.minidev.json.JSONObject;
@@ -49,11 +52,22 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
             name = "Apache Sling Oidc UserInfo Processor",
             description = "Apache Sling Oidc UserInfo Processor Service")
     @interface Config {
+
+        // Create a new attribute to read groups from id token
+        @AttributeDefinition(name = "groupsInIdToken", description = "Groups read from ID Token")
+        boolean groupsInIdToken() default false;
+
         @AttributeDefinition(name = "storeAccessToken", description = "Store access Token under User Node")
         boolean storeAccessToken() default false;
 
         @AttributeDefinition(name = "storeRefreshToken", description = "Store access Refresh under User Node")
         boolean storeRefreshToken() default false;
+
+        @AttributeDefinition(
+                name = "groupsClaimName",
+                description = "Name of the claim in the ID Token or UserInfo that contains the groups. "
+                        + "If not set, the default 'groups' is used")
+        String groupsClaimName() default "groups";
     }
 
     private static final Logger logger = LoggerFactory.getLogger(SlingUserInfoProcessorImpl.class);
@@ -61,6 +75,8 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
     private final CryptoService cryptoService;
     private final boolean storeAccessToken;
     private final boolean storeRefreshToken;
+    private final boolean groupsInIdToken;
+    private final String groupsClaimName;
 
     @Activate
     public SlingUserInfoProcessorImpl(
@@ -68,6 +84,8 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
         this.cryptoService = service;
         this.storeAccessToken = config.storeAccessToken();
         this.storeRefreshToken = config.storeRefreshToken();
+        this.groupsInIdToken = config.groupsInIdToken();
+        this.groupsClaimName = config.groupsClaimName();
     }
 
     @Override
@@ -93,20 +111,40 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
             logger.debug("Name: {}", userInfo.getGivenName());
             logger.debug("FamilyName: {}", userInfo.getFamilyName());
 
-            Object groups = userInfo.toJSONObject().remove("groups");
+            // If groups are not in ID Token, add them from UserInfo
+            userInfo.toJSONObject().forEach((key, value) -> {
+                if (value != null) {
+                    credentials.setAttribute("profile/" + key, value.toString());
+                }
+            });
+        }
+
+        if (groupsInIdToken) {
+            // If groups are in ID Token, add them to the credentials
+            try {
+                Object groups = tokenResponse
+                        .toSuccessResponse()
+                        .getTokens()
+                        .toOIDCTokens()
+                        .getIDToken()
+                        .getJWTClaimsSet()
+                        .getClaim(groupsClaimName);
+                if (groups instanceof List && groups != null) {
+                    logger.debug("Groups from ID Token: {}", groups);
+                    ((List) groups).forEach(group -> credentials.addGroup(group.toString()));
+                }
+            } catch (java.text.ParseException e) {
+                throw new RuntimeException(e);
+            }
+        } else if (userInfo != null) {
+            // If groups are not in ID Token, check UserInfo for groups
+            Object groups = userInfo.toJSONObject().remove(groupsClaimName);
             if (groups instanceof JSONArray) {
                 JSONArray groupJsonArray = (JSONArray) groups;
                 logger.debug("Groups: {}", groups);
                 // Convert the groups in a Set of Strings
                 groupJsonArray.forEach(group -> credentials.addGroup(group.toString()));
             }
-
-            // Set all the attributes in userInfo to the credentials
-            userInfo.toJSONObject().forEach((key, value) -> {
-                if (value != null) {
-                    credentials.setAttribute("profile/" + key, value.toString());
-                }
-            });
         }
         // Store the Access Token on user node
         String accessToken = tokens.accessToken();
@@ -121,7 +159,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
         // Store the Refresh Token on user node
         String refreshToken = tokens.accessToken();
         if (storeRefreshToken && refreshToken != null) {
-            credentials.setAttribute(OAuthTokenStore.PROPERTY_NAME_ACCESS_TOKEN, cryptoService.encrypt(refreshToken));
+            credentials.setAttribute(OAuthTokenStore.PROPERTY_NAME_REFRESH_TOKEN, cryptoService.encrypt(refreshToken));
         } else {
             logger.debug(
                     "Refresh Token is null, omit adding as credentials attribute '{}'",
@@ -145,7 +183,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
     private static @NotNull TokenResponse parseTokenResponse(@NotNull String stringTokenResponse) {
         try {
             JSONObject jsonTokenResponse = (JSONObject) JSONValue.parse(stringTokenResponse);
-            return TokenResponse.parse(jsonTokenResponse);
+            return OIDCTokenResponse.parse(jsonTokenResponse);
         } catch (ParseException e) {
             throw new RuntimeException("Failed to parse TokenResponse in UserInfoProcessor", e);
         }
