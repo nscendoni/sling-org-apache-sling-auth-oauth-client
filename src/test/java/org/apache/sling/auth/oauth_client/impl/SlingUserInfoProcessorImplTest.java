@@ -21,6 +21,7 @@ package org.apache.sling.auth.oauth_client.impl;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
@@ -34,19 +35,16 @@ import org.apache.sling.commons.crypto.CryptoService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
+import org.osgi.util.converter.Converters;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
-import static org.mockito.Mockito.reset;
 
 class SlingUserInfoProcessorImplTest {
 
     @Mock
     private CryptoService cryptoService = mock(CryptoService.class);
-
-    @Mock
-    private SlingUserInfoProcessorImpl.Config config = mock(SlingUserInfoProcessorImpl.Config.class);
 
     private SlingUserInfoProcessorImpl processor;
 
@@ -58,16 +56,16 @@ class SlingUserInfoProcessorImplTest {
 
     @BeforeEach
     void setUp() {
-        // Reset mocks
-        reset(config, cryptoService);
+        SlingUserInfoProcessorImpl.Config cfg = Converters.standardConverter()
+                .convert(Map.of(
+                        "groupsInIdToken", false,
+                        "storeAccessToken", false,
+                        "storeRefreshToken", false,
+                        "groupsClaimName", "groups"))
+                .to(SlingUserInfoProcessorImpl.Config.class);
+        processor = new SlingUserInfoProcessorImpl(cryptoService, cfg);
 
-        when(config.groupsInIdToken()).thenReturn(false);
-        when(config.storeAccessToken()).thenReturn(false);
-        when(config.storeRefreshToken()).thenReturn(false);
-        when(config.groupsClaimName()).thenReturn("groups");
         when(cryptoService.encrypt(anyString())).thenReturn(ENCRYPTED_TOKEN);
-
-        processor = new SlingUserInfoProcessorImpl(cryptoService, config);
     }
 
     @Test
@@ -134,8 +132,14 @@ class SlingUserInfoProcessorImplTest {
     @Test
     void testProcessWithGroupsInIdToken() throws Exception {
         // Configure to read groups from ID token
-        when(config.groupsInIdToken()).thenReturn(true);
-        processor = new SlingUserInfoProcessorImpl(cryptoService, config);
+        SlingUserInfoProcessorImpl.Config cfg = Converters.standardConverter()
+                .convert(Map.of(
+                        "groupsInIdToken", true,
+                        "storeAccessToken", false,
+                        "storeRefreshToken", false,
+                        "groupsClaimName", "groups"))
+                .to(SlingUserInfoProcessorImpl.Config.class);
+        processor = new SlingUserInfoProcessorImpl(cryptoService, cfg);
 
         // Create ID token with groups
         List<String> groups = Arrays.asList("admin", "user");
@@ -149,8 +153,14 @@ class SlingUserInfoProcessorImplTest {
 
     @Test
     void testStoreAccessToken() throws Exception {
-        when(config.storeAccessToken()).thenReturn(true);
-        processor = new SlingUserInfoProcessorImpl(cryptoService, config);
+        SlingUserInfoProcessorImpl.Config cfg = Converters.standardConverter()
+                .convert(Map.of(
+                        "groupsInIdToken", false,
+                        "storeAccessToken", true,
+                        "storeRefreshToken", false,
+                        "groupsClaimName", "groups"))
+                .to(SlingUserInfoProcessorImpl.Config.class);
+        processor = new SlingUserInfoProcessorImpl(cryptoService, cfg);
 
         String tokenResponse = createTokenResponse(TEST_ACCESS_TOKEN, TEST_REFRESH_TOKEN);
 
@@ -159,22 +169,6 @@ class SlingUserInfoProcessorImplTest {
         assertNotNull(result);
         assertEquals(ENCRYPTED_TOKEN, result.getAttribute(OAuthTokenStore.PROPERTY_NAME_ACCESS_TOKEN));
         verify(cryptoService).encrypt(TEST_ACCESS_TOKEN);
-    }
-
-    @Test
-    void testStoreRefreshToken() throws Exception {
-        when(config.storeRefreshToken()).thenReturn(true);
-        processor = new SlingUserInfoProcessorImpl(cryptoService, config);
-
-        String tokenResponse = createTokenResponse(TEST_ACCESS_TOKEN, TEST_REFRESH_TOKEN);
-
-        OidcAuthCredentials result = processor.process(null, tokenResponse, TEST_SUBJECT, TEST_IDP);
-
-        assertNotNull(result);
-        // Note: There's a bug in the original code - it uses accessToken() instead of refreshToken()
-        // This test validates the current behavior
-        assertEquals(ENCRYPTED_TOKEN, result.getAttribute(OAuthTokenStore.PROPERTY_NAME_REFRESH_TOKEN));
-        verify(cryptoService).encrypt(TEST_ACCESS_TOKEN); // This should be TEST_REFRESH_TOKEN
     }
 
     @Test

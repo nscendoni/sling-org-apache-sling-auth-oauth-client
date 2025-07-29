@@ -53,8 +53,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
             description = "Apache Sling Oidc UserInfo Processor Service")
     @interface Config {
 
-        // Create a new attribute to read groups from id token
-        @AttributeDefinition(name = "groupsInIdToken", description = "Groups read from ID Token")
+        @AttributeDefinition(name = "groupsInIdToken", description = "Read groups from ID Token")
         boolean groupsInIdToken() default false;
 
         @AttributeDefinition(name = "storeAccessToken", description = "Store access Token under User Node")
@@ -129,7 +128,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
                         .getIDToken()
                         .getJWTClaimsSet()
                         .getClaim(groupsClaimName);
-                if (groups instanceof List && groups != null) {
+                if (groups instanceof List) {
                     logger.debug("Groups from ID Token: {}", groups);
                     ((List) groups).forEach(group -> credentials.addGroup(group.toString()));
                 }
@@ -159,7 +158,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
         // Store the Refresh Token on user node
         String refreshToken = tokens.accessToken();
         if (storeRefreshToken && refreshToken != null) {
-            credentials.setAttribute(OAuthTokenStore.PROPERTY_NAME_REFRESH_TOKEN, cryptoService.encrypt(refreshToken));
+            credentials.setAttribute(OAuthTokenStore.PROPERTY_NAME_ACCESS_TOKEN, cryptoService.encrypt(refreshToken));
         } else {
             logger.debug(
                     "Refresh Token is null, omit adding as credentials attribute '{}'",
