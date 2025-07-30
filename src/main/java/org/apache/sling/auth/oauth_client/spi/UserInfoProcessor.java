@@ -30,7 +30,9 @@ public interface UserInfoProcessor {
 
     /**
      *
-     *  <p>This method is called by the OIDC authentication handler after the user info and token response have been received from the identity provider.</p>
+     *  <p>This method is called by the OIDC authentication handler after the user info and token response have been received from the identity provider.
+     *  If a failure occurs during processing, a {@link RuntimeException} should be thrown to indicate the failure.
+     *  </p>
      *
      * @param userInfo the user info received from the identity provider, may be null if not available. See: https://openid.net/specs/openid-connect-core-1_0.html#UserInfo
      * @param tokenResponse the token response received from the identity provider, must not be null. See: https://openid.net/specs/openid-connect-core-1_0.html#HybridTokenResponse
@@ -46,5 +48,6 @@ public interface UserInfoProcessor {
      */
     @NotNull
     OidcAuthCredentials process(
-            @Nullable String userInfo, @NotNull String tokenResponse, @NotNull String oidcSubject, @NotNull String idp);
+            @Nullable String userInfo, @NotNull String tokenResponse, @NotNull String oidcSubject, @NotNull String idp)
+            throws RuntimeException;
 }
