@@ -437,7 +437,8 @@ class AuthorizationCodeFlowIT {
                         null,
                         Map.of(
                                 "storeAccessToken", "true",
-                                "storeRefreshToken", "true")));
+                                "storeRefreshToken", "true",
+                                "connection", oidcConnectionName)));
 
         HashMap<String, Object> authenticationHandlerConfig = new HashMap<>();
         authenticationHandlerConfig.put("path", TEST_PATH);

@@ -61,7 +61,8 @@ class SlingUserInfoProcessorImplTest {
                         "groupsInIdToken", false,
                         "storeAccessToken", false,
                         "storeRefreshToken", false,
-                        "groupsClaimName", "groups"))
+                        "groupsClaimName", "groups",
+                        "connection", "test"))
                 .to(SlingUserInfoProcessorImpl.Config.class);
         processor = new SlingUserInfoProcessorImpl(cryptoService, cfg);
 
@@ -137,7 +138,8 @@ class SlingUserInfoProcessorImplTest {
                         "groupsInIdToken", true,
                         "storeAccessToken", false,
                         "storeRefreshToken", false,
-                        "groupsClaimName", "groups"))
+                        "groupsClaimName", "groups",
+                        "connection", "test"))
                 .to(SlingUserInfoProcessorImpl.Config.class);
         processor = new SlingUserInfoProcessorImpl(cryptoService, cfg);
 
@@ -158,7 +160,8 @@ class SlingUserInfoProcessorImplTest {
                         "groupsInIdToken", false,
                         "storeAccessToken", true,
                         "storeRefreshToken", false,
-                        "groupsClaimName", "groups"))
+                        "groupsClaimName", "groups",
+                        "connection", "test"))
                 .to(SlingUserInfoProcessorImpl.Config.class);
         processor = new SlingUserInfoProcessorImpl(cryptoService, cfg);
 

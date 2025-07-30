@@ -29,25 +29,24 @@ import org.jetbrains.annotations.Nullable;
 public interface UserInfoProcessor {
 
     /**
+     * <p>This method is called by the OIDC authentication handler after the user info and token response have been received from the identity provider.</p>
      *
-     *  <p>This method is called by the OIDC authentication handler after the user info and token response have been received from the identity provider.
-     *  If a failure occurs during processing, a {@link RuntimeException} should be thrown to indicate the failure.
-     *  </p>
-     *
-     * @param userInfo the user info received from the identity provider, may be null if not available. See: https://openid.net/specs/openid-connect-core-1_0.html#UserInfo
+     * @param userInfo      the user info received from the identity provider, may be null if not available. See: https://openid.net/specs/openid-connect-core-1_0.html#UserInfo
      * @param tokenResponse the token response received from the identity provider, must not be null. See: https://openid.net/specs/openid-connect-core-1_0.html#HybridTokenResponse
-     * @param oidcSubject the OIDC subject identifier as defined in ID Token, must not be null
-     * @param idp the identity provider identifier as defined in OidcAuthenticationHandler configuration, must not be null
-     * @return the credentials to be returned by the authentication handler, must not be null
-     *
+     * @param oidcSubject   the OIDC subject identifier as defined in ID Token, must not be null
+     * @param idp           the identity provider identifier as defined in OidcAuthenticationHandler configuration, must not be null
      * @param userInfo
      * @param tokenResponse
      * @param oidcSubject
      * @param idp
+     * @return the credentials to be returned by the authentication handler, must not be null
      * @return
      */
     @NotNull
     OidcAuthCredentials process(
             @Nullable String userInfo, @NotNull String tokenResponse, @NotNull String oidcSubject, @NotNull String idp)
             throws RuntimeException;
+
+    @NotNull
+    String connection();
 }

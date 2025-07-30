@@ -66,6 +66,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.osgi.framework.BundleContext;
+import org.osgi.util.converter.Converters;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -85,7 +86,7 @@ class OidcAuthenticationHandlerTest {
 
     private OidcAuthenticationHandler.Config config;
     private LoginCookieManager loginCookieManager;
-    private UserInfoProcessor userInfoProcessor;
+    private List<UserInfoProcessor> userInfoProcessors;
     private HttpServletRequest request;
     private HttpServletResponse response;
     private HttpServer tokenEndpointServer;
@@ -103,10 +104,18 @@ class OidcAuthenticationHandlerTest {
         when(config.path()).thenReturn(new String[] {"/"});
         loginCookieManager = mock(LoginCookieManager.class);
 
-        SlingUserInfoProcessorImpl.Config userInfoConfig = mock(SlingUserInfoProcessorImpl.Config.class);
-        when(userInfoConfig.storeAccessToken()).thenReturn(false);
-        when(userInfoConfig.storeRefreshToken()).thenReturn(false);
-        userInfoProcessor = new SlingUserInfoProcessorImpl(mock(CryptoService.class), userInfoConfig);
+        SlingUserInfoProcessorImpl.Config userInfoConfig = Converters.standardConverter()
+                .convert(Map.of(
+                        "storeAccessToken", false,
+                        "storeRefreshToken", false,
+                        "connection", "mock-oidc-param",
+                        "groupsInIdToken", false,
+                        "groupsClaimName", "groups"))
+                .to(SlingUserInfoProcessorImpl.Config.class);
+
+        UserInfoProcessor userInfoProcessor = new SlingUserInfoProcessorImpl(mock(CryptoService.class), userInfoConfig);
+        userInfoProcessors = new ArrayList<>();
+        userInfoProcessors.add(userInfoProcessor);
 
         when(config.userInfoEnabled()).thenReturn(true);
         when(config.pkceEnabled()).thenReturn(false);
@@ -796,7 +805,7 @@ class OidcAuthenticationHandlerTest {
 
     private void createOidcAuthenticationHandler() {
         oidcAuthenticationHandler = new OidcAuthenticationHandler(
-                bundleContext, connections, config, loginCookieManager, userInfoProcessor, cryptoService);
+                bundleContext, connections, config, loginCookieManager, userInfoProcessors, cryptoService);
     }
 
     private HttpServer createHttpServer() throws IOException {

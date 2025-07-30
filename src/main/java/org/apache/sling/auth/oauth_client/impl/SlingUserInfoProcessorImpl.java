@@ -45,7 +45,7 @@ import org.slf4j.LoggerFactory;
 @Component(
         service = UserInfoProcessor.class,
         property = {"service.ranking:Integer=10"})
-@Designate(ocd = SlingUserInfoProcessorImpl.Config.class)
+@Designate(ocd = SlingUserInfoProcessorImpl.Config.class, factory = true)
 public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
 
     @ObjectClassDefinition(
@@ -67,6 +67,9 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
                 description = "Name of the claim in the ID Token or UserInfo that contains the groups. "
                         + "If not set, the default 'groups' is used")
         String groupsClaimName() default "groups";
+
+        @AttributeDefinition(name = "connection", description = "OIDC Connection Name")
+        String connection();
     }
 
     private static final Logger logger = LoggerFactory.getLogger(SlingUserInfoProcessorImpl.class);
@@ -76,6 +79,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
     private final boolean storeRefreshToken;
     private final boolean groupsInIdToken;
     private final String groupsClaimName;
+    private final String connection;
 
     @Activate
     public SlingUserInfoProcessorImpl(
@@ -85,6 +89,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
         this.storeRefreshToken = config.storeRefreshToken();
         this.groupsInIdToken = config.groupsInIdToken();
         this.groupsClaimName = config.groupsClaimName();
+        this.connection = config.connection();
     }
 
     @Override
@@ -186,5 +191,10 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
         } catch (ParseException e) {
             throw new RuntimeException("Failed to parse TokenResponse in UserInfoProcessor", e);
         }
+    }
+
+    @Override
+    public @NotNull String connection() {
+        return connection;
     }
 }

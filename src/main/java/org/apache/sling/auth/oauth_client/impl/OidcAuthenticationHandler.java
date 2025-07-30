@@ -101,7 +101,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
     private final String defaultConnectionName;
 
-    private final UserInfoProcessor userInfoProcessor;
+    private final Map<String, UserInfoProcessor> userInfoProcessors;
 
     private final boolean userInfoEnabled;
 
@@ -146,7 +146,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             @Reference List<ClientConnection> connections,
             Config config,
             @Reference(policyOption = ReferencePolicyOption.GREEDY) LoginCookieManager loginCookieManager,
-            @Reference(policyOption = ReferencePolicyOption.GREEDY) UserInfoProcessor userInfoProcessor,
+            @Reference(policyOption = ReferencePolicyOption.GREEDY) List<UserInfoProcessor> userInfoProcessors,
             @Reference CryptoService cryptoService) {
 
         this.connections = connections.stream().collect(Collectors.toMap(ClientConnection::name, Function.identity()));
@@ -154,7 +154,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         this.callbackUri = config.callbackUri();
         this.loginCookieManager = loginCookieManager;
         this.defaultConnectionName = config.defaultConnectionName();
-        this.userInfoProcessor = userInfoProcessor;
+        this.userInfoProcessors = userInfoProcessors.stream()
+                .collect(Collectors.toMap(UserInfoProcessor::connection, Function.identity()));
         this.userInfoEnabled = config.userInfoEnabled();
         this.pkceEnabled = config.pkceEnabled();
         this.path = config.path();
@@ -278,6 +279,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 UserInfo userInfo = userInfoResponse.toSuccessResponse().getUserInfo();
 
                 // process credentials
+                UserInfoProcessor userInfoProcessor = userInfoProcessors.get(connection.name());
                 return userInfoProcessor.process(
                         userInfo.toJSONObject().toJSONString(),
                         tokenResponse.toSuccessResponse().toJSONObject().toJSONString(),
@@ -289,6 +291,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 throw new RuntimeException(e);
             }
         } else {
+            UserInfoProcessor userInfoProcessor = userInfoProcessors.get(connection.name());
             return userInfoProcessor.process(
                     null,
                     tokenResponse
