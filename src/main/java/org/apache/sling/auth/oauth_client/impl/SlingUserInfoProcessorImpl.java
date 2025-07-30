@@ -166,7 +166,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
         // Store the Refresh Token on user node
         String refreshToken = tokens.accessToken();
         if (storeRefreshToken && refreshToken != null) {
-            credentials.setAttribute(OAuthTokenStore.PROPERTY_NAME_ACCESS_TOKEN, cryptoService.encrypt(refreshToken));
+            credentials.setAttribute(OAuthTokenStore.PROPERTY_NAME_REFRESH_TOKEN, cryptoService.encrypt(refreshToken));
         } else {
             logger.debug(
                     "Refresh Token is null, omit adding as credentials attribute '{}'",
