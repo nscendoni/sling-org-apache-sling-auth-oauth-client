@@ -280,6 +280,12 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
                 // process credentials
                 UserInfoProcessor userInfoProcessor = userInfoProcessors.get(connection.name());
+                if (userInfoProcessor == null) {
+                    throw new IllegalStateException(
+                            "No matching UserInfoProcessor found for connection " + connection.name());
+                }
+
+                // Process the user info and token response and return the processed credentials
                 return userInfoProcessor.process(
                         userInfo.toJSONObject().toJSONString(),
                         tokenResponse.toSuccessResponse().toJSONObject().toJSONString(),
