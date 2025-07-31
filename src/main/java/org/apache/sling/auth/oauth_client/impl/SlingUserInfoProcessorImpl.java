@@ -89,6 +89,9 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
         this.storeRefreshToken = config.storeRefreshToken();
         this.groupsInIdToken = config.groupsInIdToken();
         this.groupsClaimName = config.groupsClaimName();
+        if (config.connection() == null || config.connection().isEmpty()) {
+            throw new IllegalArgumentException("Connection name must not be null or empty");
+        }
         this.connection = config.connection();
     }
 
