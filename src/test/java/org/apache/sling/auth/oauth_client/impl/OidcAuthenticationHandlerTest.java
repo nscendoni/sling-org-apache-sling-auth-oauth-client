@@ -493,7 +493,8 @@ class OidcAuthenticationHandlerTest {
     }
 
     @Test
-    void extractCredentials_WithMatchingState_WithValidConnection_WithValidIdToken_WithUserInfo_WithPkceEnabledWithCookie()
+    void
+            extractCredentials_WithMatchingState_WithValidConnection_WithValidIdToken_WithUserInfo_WithPkceEnabledWithCookie()
                     throws JOSEException {
         RSAKey rsaJWK = new RSAKeyGenerator(2048).keyID("123").generate();
         when(config.userInfoEnabled()).thenReturn(true);
