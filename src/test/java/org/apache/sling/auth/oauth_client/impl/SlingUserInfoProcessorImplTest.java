@@ -20,6 +20,7 @@ package org.apache.sling.auth.oauth_client.impl;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -61,7 +62,8 @@ class SlingUserInfoProcessorImplTest {
                         "groupsInIdToken", false,
                         "storeAccessToken", false,
                         "storeRefreshToken", false,
-                        "groupsClaimName", "groups"))
+                        "groupsClaimName", "groups",
+                        "connection", "test"))
                 .to(SlingUserInfoProcessorImpl.Config.class);
         processor = new SlingUserInfoProcessorImpl(cryptoService, cfg);
 
@@ -137,7 +139,8 @@ class SlingUserInfoProcessorImplTest {
                         "groupsInIdToken", true,
                         "storeAccessToken", false,
                         "storeRefreshToken", false,
-                        "groupsClaimName", "groups"))
+                        "groupsClaimName", "groups",
+                        "connection", "test"))
                 .to(SlingUserInfoProcessorImpl.Config.class);
         processor = new SlingUserInfoProcessorImpl(cryptoService, cfg);
 
@@ -158,7 +161,8 @@ class SlingUserInfoProcessorImplTest {
                         "groupsInIdToken", false,
                         "storeAccessToken", true,
                         "storeRefreshToken", false,
-                        "groupsClaimName", "groups"))
+                        "groupsClaimName", "groups",
+                        "connection", "test"))
                 .to(SlingUserInfoProcessorImpl.Config.class);
         processor = new SlingUserInfoProcessorImpl(cryptoService, cfg);
 
@@ -204,6 +208,23 @@ class SlingUserInfoProcessorImplTest {
         assertThrows(RuntimeException.class, () -> {
             processor.process(invalidUserInfo, tokenResponse, TEST_SUBJECT, TEST_IDP);
         });
+    }
+
+    @Test
+    void testNullConnection() {
+        Map<String, String> configMap = new HashMap<>();
+        configMap.put("connection", null);
+
+        SlingUserInfoProcessorImpl.Config cfg =
+                Converters.standardConverter().convert(configMap).to(SlingUserInfoProcessorImpl.Config.class);
+
+        try {
+            new SlingUserInfoProcessorImpl(cryptoService, cfg);
+            fail("Expected IllegalArgumentException for null connection name");
+        } catch (IllegalArgumentException e) {
+            // success
+            assertEquals("Connection name must not be null or empty", e.getMessage());
+        }
     }
 
     private String createTokenResponse(String accessToken, String refreshToken) throws Exception {

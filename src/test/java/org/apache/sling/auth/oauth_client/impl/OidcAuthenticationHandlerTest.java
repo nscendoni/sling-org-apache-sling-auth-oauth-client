@@ -66,6 +66,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.osgi.framework.BundleContext;
+import org.osgi.util.converter.Converters;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -85,7 +86,7 @@ class OidcAuthenticationHandlerTest {
 
     private OidcAuthenticationHandler.Config config;
     private LoginCookieManager loginCookieManager;
-    private UserInfoProcessor userInfoProcessor;
+    private List<UserInfoProcessor> userInfoProcessors;
     private HttpServletRequest request;
     private HttpServletResponse response;
     private HttpServer tokenEndpointServer;
@@ -103,10 +104,18 @@ class OidcAuthenticationHandlerTest {
         when(config.path()).thenReturn(new String[] {"/"});
         loginCookieManager = mock(LoginCookieManager.class);
 
-        SlingUserInfoProcessorImpl.Config userInfoConfig = mock(SlingUserInfoProcessorImpl.Config.class);
-        when(userInfoConfig.storeAccessToken()).thenReturn(false);
-        when(userInfoConfig.storeRefreshToken()).thenReturn(false);
-        userInfoProcessor = new SlingUserInfoProcessorImpl(mock(CryptoService.class), userInfoConfig);
+        SlingUserInfoProcessorImpl.Config userInfoConfig = Converters.standardConverter()
+                .convert(Map.of(
+                        "storeAccessToken", false,
+                        "storeRefreshToken", false,
+                        "connection", "mock-oidc-param",
+                        "groupsInIdToken", false,
+                        "groupsClaimName", "groups"))
+                .to(SlingUserInfoProcessorImpl.Config.class);
+
+        UserInfoProcessor userInfoProcessor = new SlingUserInfoProcessorImpl(mock(CryptoService.class), userInfoConfig);
+        userInfoProcessors = new ArrayList<>();
+        userInfoProcessors.add(userInfoProcessor);
 
         when(config.userInfoEnabled()).thenReturn(true);
         when(config.pkceEnabled()).thenReturn(false);
@@ -382,7 +391,8 @@ class OidcAuthenticationHandlerTest {
                         rsaJWK,
                         "http://localhost:4567",
                         createMockCookies(),
-                        false));
+                        false,
+                        true));
         assertEquals(
                 "Signed JWT rejected: Another algorithm expected, or no matching key(s) found", exception.getMessage());
     }
@@ -399,7 +409,8 @@ class OidcAuthenticationHandlerTest {
                         rsaJWK,
                         "http://localhost:4567",
                         createMockCookies(),
-                        false));
+                        false,
+                        true));
         assertEquals("Unexpected JWT audience: [wrong-client-id]", exception.getMessage());
     }
 
@@ -415,7 +426,8 @@ class OidcAuthenticationHandlerTest {
                         rsaJWK,
                         "http://localhost:4567",
                         createMockCookies(),
-                        false));
+                        false,
+                        true));
         assertEquals("Unexpected JWT issuer: wrong-issuer", exception.getMessage());
     }
 
@@ -429,10 +441,32 @@ class OidcAuthenticationHandlerTest {
                 rsaJWK,
                 "http://localhost:4567",
                 createMockCookies(),
-                false);
+                false,
+                true);
         assertEquals("1234567890", authInfo.get("user.name"));
         assertEquals(
                 "testUser", ((OidcAuthCredentials) authInfo.get("user.jcr.credentials")).getAttribute("profile/name"));
+    }
+
+    @Test
+    void extractCredentials_WithMatchingState_WithValidConnection_WithValidIdToken_WithMissingUserInfo()
+            throws JOSEException {
+        RSAKey rsaJWK = new RSAKeyGenerator(2048).keyID("123").generate();
+        when(config.userInfoEnabled()).thenReturn(true);
+        userInfoProcessors = new ArrayList<>();
+        createOidcAuthenticationHandler();
+
+        // Test with an id token signed by another key, and expired
+        RuntimeException exception = assertThrows(
+                RuntimeException.class,
+                () -> extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(
+                        createIdToken(rsaJWK, "client-id", ISSUER),
+                        rsaJWK,
+                        "http://localhost:4567",
+                        createMockCookies(),
+                        false,
+                        true));
+        assertEquals("No matching UserInfoProcessor found for connection mock-oidc-param", exception.getMessage());
     }
 
     @Test
@@ -453,7 +487,8 @@ class OidcAuthenticationHandlerTest {
                         rsaJWK,
                         "http://localhost:4567",
                         new Cookie[] {stateCookie},
-                        false));
+                        false,
+                        true));
         assertEquals("Unexpected JWT nonce (nonce) claim: nonce", exception.getMessage());
     }
 
@@ -478,6 +513,7 @@ class OidcAuthenticationHandlerTest {
                 rsaJWK,
                 "http://localhost:4567",
                 new Cookie[] {stateCookie},
+                true,
                 true);
         // Remark: presence of state and code verifier parameter are checked inside
         // extractCredentials_WithMatchingState_WithValidConnection_WithIdToken
@@ -495,7 +531,8 @@ class OidcAuthenticationHandlerTest {
                 rsaJWK,
                 "http://localhost:4567",
                 createMockCookies(),
-                false);
+                false,
+                true);
         assertEquals("1234567890", authInfo.get("user.name"));
     }
 
@@ -700,7 +737,7 @@ class OidcAuthenticationHandlerTest {
     }
 
     private AuthenticationInfo extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(
-            String idToken, RSAKey rsaJWK, String baseUrl, Cookie[] cookies, boolean withPkce) {
+            String idToken, RSAKey rsaJWK, String baseUrl, Cookie[] cookies, boolean withPkce, boolean withUserInfo) {
         idpServer.createContext("/token", exchange -> {
             if (withPkce) {
                 assertTrue(new String(exchange.getRequestBody().readAllBytes())
@@ -796,7 +833,7 @@ class OidcAuthenticationHandlerTest {
 
     private void createOidcAuthenticationHandler() {
         oidcAuthenticationHandler = new OidcAuthenticationHandler(
-                bundleContext, connections, config, loginCookieManager, userInfoProcessor, cryptoService);
+                bundleContext, connections, config, loginCookieManager, userInfoProcessors, cryptoService);
     }
 
     private HttpServer createHttpServer() throws IOException {
