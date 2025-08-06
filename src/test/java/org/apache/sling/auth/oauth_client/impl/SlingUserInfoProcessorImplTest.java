@@ -54,6 +54,7 @@ class SlingUserInfoProcessorImplTest {
     private static final String TEST_ACCESS_TOKEN = "test-access-token";
     private static final String TEST_REFRESH_TOKEN = "test-refresh-token";
     private static final String ENCRYPTED_TOKEN = "encrypted-token";
+    private static final String ENCRYPTED_REFRESH_TOKEN = "encrypted-refresh-token";
 
     @BeforeEach
     void setUp() {
@@ -66,8 +67,6 @@ class SlingUserInfoProcessorImplTest {
                         "connection", "test"))
                 .to(SlingUserInfoProcessorImpl.Config.class);
         processor = new SlingUserInfoProcessorImpl(cryptoService, cfg);
-
-        when(cryptoService.encrypt(anyString())).thenReturn(ENCRYPTED_TOKEN);
     }
 
     @Test
@@ -156,6 +155,8 @@ class SlingUserInfoProcessorImplTest {
 
     @Test
     void testStoreAccessToken() throws Exception {
+        when(cryptoService.encrypt(anyString())).thenReturn(ENCRYPTED_TOKEN);
+
         SlingUserInfoProcessorImpl.Config cfg = Converters.standardConverter()
                 .convert(Map.of(
                         "groupsInIdToken", false,
@@ -177,6 +178,8 @@ class SlingUserInfoProcessorImplTest {
 
     @Test
     void testStoreRefreshToken() throws Exception {
+        when(cryptoService.encrypt(anyString())).thenReturn(ENCRYPTED_REFRESH_TOKEN);
+
         SlingUserInfoProcessorImpl.Config cfg = Converters.standardConverter()
                 .convert(Map.of(
                         "groupsInIdToken", false,
@@ -192,10 +195,9 @@ class SlingUserInfoProcessorImplTest {
         OidcAuthCredentials result = processor.process(null, tokenResponse, TEST_SUBJECT, TEST_IDP);
 
         assertNotNull(result);
-        // Note: There's a bug in the original code - it uses accessToken() instead of refreshToken()
-        // This test validates the current behavior
-        assertEquals(ENCRYPTED_TOKEN, result.getAttribute(OAuthTokenStore.PROPERTY_NAME_REFRESH_TOKEN));
-        verify(cryptoService).encrypt(TEST_ACCESS_TOKEN); // This should be TEST_REFRESH_TOKEN
+
+        assertEquals(ENCRYPTED_REFRESH_TOKEN, result.getAttribute(OAuthTokenStore.PROPERTY_NAME_REFRESH_TOKEN));
+        verify(cryptoService).encrypt(TEST_REFRESH_TOKEN);
     }
 
     @Test
