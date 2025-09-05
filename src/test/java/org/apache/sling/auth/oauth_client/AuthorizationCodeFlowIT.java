@@ -57,6 +57,7 @@ import org.apache.sling.auth.oauth_client.impl.JcrUserHomeOAuthTokenStore;
 import org.apache.sling.auth.oauth_client.impl.OAuthConnectionImpl;
 import org.apache.sling.auth.oauth_client.impl.OAuthCookieValue;
 import org.apache.sling.auth.oauth_client.impl.OidcConnectionImpl;
+import org.apache.sling.auth.oauth_client.impl.SlingLoginCookieManager;
 import org.apache.sling.auth.oauth_client.impl.SlingUserInfoProcessorImpl;
 import org.apache.sling.auth.oauth_client.itbundle.SupportBundle;
 import org.apache.sling.commons.crypto.internal.EnvironmentVariablePasswordProvider;
@@ -355,6 +356,10 @@ class AuthorizationCodeFlowIT {
         // configure token store
         configPidsToCleanup.add(sling.adaptTo(OsgiConsoleClient.class)
                 .editConfiguration(JcrUserHomeOAuthTokenStore.class.getName(), null, Map.of("unused", "unused")));
+
+        // configure login cookie manager
+        configPidsToCleanup.add(sling.adaptTo(OsgiConsoleClient.class)
+                .editConfiguration(SlingLoginCookieManager.class.getName(), null, Map.of("idpName", "oidc")));
 
         String oidcConnectionName = "keycloak";
 
