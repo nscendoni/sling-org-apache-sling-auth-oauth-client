@@ -359,7 +359,7 @@ class AuthorizationCodeFlowIT {
 
         // configure login cookie manager
         configPidsToCleanup.add(sling.adaptTo(OsgiConsoleClient.class)
-                .editConfiguration(SlingLoginCookieManager.class.getName(), null, Map.of("idpName", "oidc")));
+                .editConfiguration(SlingLoginCookieManager.class.getName(), null, Map.of("idpName", "oidc-idp")));
 
         String oidcConnectionName = "keycloak";
 
@@ -434,7 +434,7 @@ class AuthorizationCodeFlowIT {
                         EXTERNAL_LOGIN_MODULE_FACTORY_PID,
                         Map.of(
                                 "sync.handlerName", "oidc",
-                                "idp.name", "oidc")));
+                                "idp.name", "oidc-idp")));
 
         configPidsToCleanup.add(sling.adaptTo(OsgiConsoleClient.class)
                 .editConfiguration(
@@ -453,6 +453,7 @@ class AuthorizationCodeFlowIT {
                 "callbackUri", "http://localhost:" + slingPort + TEST_PATH + "/j_security_check");
 
         authenticationHandlerConfig.put("pkceEnabled", Boolean.toString(withPkce));
+        authenticationHandlerConfig.put("idp", "oidc-idp");
 
         configPidsToCleanup.add(sling.adaptTo(OsgiConsoleClient.class)
                 .editConfiguration(
