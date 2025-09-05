@@ -54,6 +54,7 @@ public class SlingLoginCookieManager implements LoginCookieManager {
     private final TokenStore tokenStore;
     private final long sessionTimeout;
     private final String cookieName;
+    private final String idpName;
 
     @ObjectClassDefinition(
             name = "Apache Sling Token Update Configuration for OIDC Authentication Handler",
@@ -70,6 +71,9 @@ public class SlingLoginCookieManager implements LoginCookieManager {
 
         @AttributeDefinition(name = "cookieName", description = "Cookie Name")
         String cookieName() default "sling.oidcauth";
+
+        @AttributeDefinition(name = "idpName", description = "IdP Name")
+        String idpName();
     }
 
     @Activate
@@ -83,6 +87,7 @@ public class SlingLoginCookieManager implements LoginCookieManager {
         this.sessionTimeout = config.sessionTimeout();
         this.cookieName = config.cookieName();
         this.tokenStore = new TokenStore(tokenFile, sessionTimeout, fastSeed);
+        this.idpName = config.idpName();
     }
 
     @Override
@@ -134,16 +139,16 @@ public class SlingLoginCookieManager implements LoginCookieManager {
         return null;
     }
 
-    private static @Nullable AuthenticationInfo createAuthInfo(@NotNull final String authData) {
+    private @Nullable AuthenticationInfo createAuthInfo(@NotNull final String authData) {
         final String userId = getUserId(authData);
         if (userId == null) {
             return null;
         }
 
-        OidcAuthCredentials credentials = new OidcAuthCredentials(userId, "oidc");
+        OidcAuthCredentials credentials = new OidcAuthCredentials(userId, idpName);
         credentials.setAttribute(".token", "");
 
-        AuthenticationInfo authInfo = new AuthenticationInfo("oidc", userId);
+        AuthenticationInfo authInfo = new AuthenticationInfo(idpName, userId);
         authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS, credentials);
 
         return authInfo;

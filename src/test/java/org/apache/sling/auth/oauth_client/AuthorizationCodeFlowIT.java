@@ -57,6 +57,7 @@ import org.apache.sling.auth.oauth_client.impl.JcrUserHomeOAuthTokenStore;
 import org.apache.sling.auth.oauth_client.impl.OAuthConnectionImpl;
 import org.apache.sling.auth.oauth_client.impl.OAuthCookieValue;
 import org.apache.sling.auth.oauth_client.impl.OidcConnectionImpl;
+import org.apache.sling.auth.oauth_client.impl.SlingLoginCookieManager;
 import org.apache.sling.auth.oauth_client.impl.SlingUserInfoProcessorImpl;
 import org.apache.sling.auth.oauth_client.itbundle.SupportBundle;
 import org.apache.sling.commons.crypto.internal.EnvironmentVariablePasswordProvider;
@@ -356,6 +357,10 @@ class AuthorizationCodeFlowIT {
         configPidsToCleanup.add(sling.adaptTo(OsgiConsoleClient.class)
                 .editConfiguration(JcrUserHomeOAuthTokenStore.class.getName(), null, Map.of("unused", "unused")));
 
+        // configure login cookie manager
+        configPidsToCleanup.add(sling.adaptTo(OsgiConsoleClient.class)
+                .editConfiguration(SlingLoginCookieManager.class.getName(), null, Map.of("idpName", "oidc-idp")));
+
         String oidcConnectionName = "keycloak";
 
         // configure connection to keycloak
@@ -429,7 +434,7 @@ class AuthorizationCodeFlowIT {
                         EXTERNAL_LOGIN_MODULE_FACTORY_PID,
                         Map.of(
                                 "sync.handlerName", "oidc",
-                                "idp.name", "oidc")));
+                                "idp.name", "oidc-idp")));
 
         configPidsToCleanup.add(sling.adaptTo(OsgiConsoleClient.class)
                 .editConfiguration(
@@ -448,6 +453,7 @@ class AuthorizationCodeFlowIT {
                 "callbackUri", "http://localhost:" + slingPort + TEST_PATH + "/j_security_check");
 
         authenticationHandlerConfig.put("pkceEnabled", Boolean.toString(withPkce));
+        authenticationHandlerConfig.put("idp", "oidc-idp");
 
         configPidsToCleanup.add(sling.adaptTo(OsgiConsoleClient.class)
                 .editConfiguration(
