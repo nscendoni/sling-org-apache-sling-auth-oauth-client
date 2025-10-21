@@ -99,6 +99,12 @@ class TokenAccessImplTest {
             assertThat(tr.getTokenValue()).as("tokenValue").isEqualTo(refreshedTokens.accessToken());
             assertThrows(IllegalStateException.class, tr::getRedirectUri, "getRedirectUri");
         });
+
+        assertThat(tokenStore
+                        .getRefreshToken(MockOidcConnection.DEFAULT_CONNECTION, slingContext.resourceResolver())
+                        .getValue())
+                .as("refresh token after refresh")
+                .isEqualTo(expiredTokens.refreshToken());
     }
 
     private static @NotNull TokenAccessImpl getTokenAccess(

@@ -82,6 +82,11 @@ public class TokenAccessImpl implements OAuthTokenAccess {
                 }
 
                 OAuthTokens newTokens = tokenRefresher.refreshTokens(connection, refreshToken.getValue());
+                if (newTokens.refreshToken() == null) {
+                    // retain old refresh token if none was returned
+                    newTokens =
+                            new OAuthTokens(newTokens.accessToken(), newTokens.expiresAt(), refreshToken.getValue());
+                }
                 tokenStore.persistTokens(connection, resolver, newTokens);
 
                 // FIXME: newTokens.accessToken() may return null -> NPE
