@@ -89,7 +89,6 @@ public class TokenAccessImpl implements OAuthTokenAccess {
                 }
                 tokenStore.persistTokens(connection, resolver, newTokens);
 
-                // FIXME: newTokens.accessToken() may return null -> NPE
                 return new OAuthTokenResponse(Optional.of(newTokens.accessToken()), connection, request, redirectPath);
             }
         }
