@@ -72,6 +72,7 @@ public class OidcConnectionImpl implements ClientConnection {
     private final String userInfoUrl;
     private final String jwkSetURL;
     private final String issuer;
+    private final boolean hasBaseUrl;
 
     @Activate
     public OidcConnectionImpl(Config cfg, @Reference OidcProviderMetadataRegistry metadataRegistry) {
@@ -84,23 +85,38 @@ public class OidcConnectionImpl implements ClientConnection {
         this.issuer = cfg.issuer();
 
         // Validate configuration: either baseUrl is provided OR all explicit endpoints are provided
-        boolean hasBaseUrl = cfg.baseUrl() != null && !cfg.baseUrl().isEmpty();
-        boolean hasExplicitEndpoints = authorizationEndpoint != null
-                && !authorizationEndpoint.isEmpty()
-                && tokenEndpoint != null
-                && !tokenEndpoint.isEmpty()
-                && userInfoUrl != null
-                && !userInfoUrl.isEmpty()
-                && jwkSetURL != null
-                && !jwkSetURL.isEmpty()
-                && issuer != null
-                && !issuer.isEmpty();
+        hasBaseUrl = !isNullOrEmpty(cfg.baseUrl());
 
-        if (!hasBaseUrl && !hasExplicitEndpoints) {
+        if (hasBaseUrl && !isNullOrEmpty(tokenEndpoint)
+                && !isNullOrEmpty(authorizationEndpoint)
+                && !isNullOrEmpty(userInfoUrl)
+                && !isNullOrEmpty(jwkSetURL)
+                && !isNullOrEmpty(issuer)) {
+            throw new IllegalArgumentException(
+                    "Either baseUrl OR explicit endpoints "
+                            + "(authorizationEndpoint, tokenEndpoint, userInfoUrl, jwkSetURL, issuer) must be provided, not both");
+        }
+
+        if (!hasBaseUrl && isNullOrEmpty(tokenEndpoint)
+                && isNullOrEmpty(authorizationEndpoint)
+                && isNullOrEmpty(userInfoUrl)
+                && isNullOrEmpty(jwkSetURL)
+                && isNullOrEmpty(issuer)) {
             throw new IllegalArgumentException("Either baseUrl must be provided OR all explicit endpoints "
                     + "(authorizationEndpoint, tokenEndpoint, userInfoUrl, jwkSetURL, issuer) must be provided");
         }
     }
+
+    /**
+     * Checks if a string is null or empty.
+     *
+     * @param str the string to check
+     * @return true if the string is null and not empty, false otherwise
+     */
+    private static boolean isNullOrEmpty(String str) {
+        return str == null || str.isEmpty();
+    }
+
 
     @Override
     public @NotNull String name() {
@@ -108,17 +124,17 @@ public class OidcConnectionImpl implements ClientConnection {
     }
 
     public @NotNull String authorizationEndpoint() {
-        if (cfg.baseUrl() == null || cfg.baseUrl().isEmpty()) {
-            return authorizationEndpoint;
+        if (hasBaseUrl) {
+            return metadataRegistry.getAuthorizationEndpoint(cfg.baseUrl()).toString();
         }
-        return metadataRegistry.getAuthorizationEndpoint(cfg.baseUrl()).toString();
+        return authorizationEndpoint;
     }
 
     public @NotNull String tokenEndpoint() {
-        if (cfg.baseUrl() == null || cfg.baseUrl().isEmpty()) {
-            return tokenEndpoint;
+        if (hasBaseUrl) {
+            return metadataRegistry.getTokenEndpoint(cfg.baseUrl()).toString();
         }
-        return metadataRegistry.getTokenEndpoint(cfg.baseUrl()).toString();
+        return tokenEndpoint;
     }
 
     public @NotNull String clientId() {
@@ -144,25 +160,25 @@ public class OidcConnectionImpl implements ClientConnection {
 
     @NotNull
     String userInfoUrl() {
-        if (cfg.baseUrl() == null || cfg.baseUrl().isEmpty()) {
-            return userInfoUrl;
+        if (hasBaseUrl) {
+            return metadataRegistry.getUserInfoEndpoint(cfg.baseUrl()).toString();
         }
-        return metadataRegistry.getUserInfoEndpoint(cfg.baseUrl()).toString();
+        return userInfoUrl;
     }
 
     @NotNull
     URI jwkSetURL() {
-        if (cfg.baseUrl() == null || cfg.baseUrl().isEmpty()) {
-            return URI.create(jwkSetURL);
+        if (hasBaseUrl) {
+            return metadataRegistry.getJWKSetURI(cfg.baseUrl());
         }
-        return metadataRegistry.getJWKSetURI(cfg.baseUrl());
+        return URI.create(jwkSetURL);
     }
 
     @NotNull
     String issuer() {
-        if (cfg.baseUrl() == null || cfg.baseUrl().isEmpty()) {
-            return issuer;
+        if (hasBaseUrl) {
+            return metadataRegistry.getIssuer(cfg.baseUrl());
         }
-        return metadataRegistry.getIssuer(cfg.baseUrl());
+        return issuer;
     }
 }
