@@ -87,28 +87,50 @@ public class OidcConnectionImpl implements ClientConnection {
         // Validate configuration: either baseUrl is provided OR all explicit endpoints are provided
         hasBaseUrl = !isNullOrEmpty(cfg.baseUrl());
 
-        if (hasBaseUrl
-                && !isNullOrEmpty(tokenEndpoint)
-                && !isNullOrEmpty(authorizationEndpoint)
-                && !isNullOrEmpty(userInfoUrl)
-                && !isNullOrEmpty(jwkSetURL)
-                && !isNullOrEmpty(issuer)) {
+        isValidConfig();
+    }
+
+    /**
+     * Validate configuration.
+     */
+    private void isValidConfig() {
+        // if baseUrl is provided, no manual configuration parameter must be provided
+        if (hasBaseUrl && hasAnyManualConfigurationParameter()) {
             throw new IllegalArgumentException(
                     "Either baseUrl OR explicit endpoints "
                             + "(authorizationEndpoint, tokenEndpoint, userInfoUrl, jwkSetURL, issuer) must be provided, not both");
         }
 
-        if (!hasBaseUrl
-                && isNullOrEmpty(tokenEndpoint)
-                && isNullOrEmpty(authorizationEndpoint)
-                && isNullOrEmpty(userInfoUrl)
-                && isNullOrEmpty(jwkSetURL)
-                && isNullOrEmpty(issuer)) {
+        // if baseUrl is not provided, all manual configuration parameters must be provided
+        if (!hasBaseUrl && !hasAllManualConfigurationParameters()) {
             throw new IllegalArgumentException("Either baseUrl must be provided OR all explicit endpoints "
                     + "(authorizationEndpoint, tokenEndpoint, userInfoUrl, jwkSetURL, issuer) must be provided");
         }
     }
 
+    /**
+     * Return true if any manual configuration parameter is provided.
+     * @return
+     */
+    private boolean hasAnyManualConfigurationParameter() {
+        return !isNullOrEmpty(tokenEndpoint)
+                || !isNullOrEmpty(authorizationEndpoint)
+                || !isNullOrEmpty(userInfoUrl)
+                || !isNullOrEmpty(jwkSetURL)
+                || !isNullOrEmpty(issuer);
+    }
+
+    /**
+     * Return true if all manual configuration parameters are provided.
+     * @return
+     */
+    private boolean hasAllManualConfigurationParameters() {
+        return !isNullOrEmpty(tokenEndpoint)
+                && !isNullOrEmpty(authorizationEndpoint)
+                && !isNullOrEmpty(userInfoUrl)
+                && !isNullOrEmpty(jwkSetURL)
+                && !isNullOrEmpty(issuer);
+    }
     /**
      * Checks if a string is null or empty.
      *
