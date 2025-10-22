@@ -42,6 +42,16 @@ public class OidcConnectionImpl implements ClientConnection {
 
         String baseUrl();
 
+        String authorizationEndpoint();
+
+        String tokenEndpoint();
+
+        String userInfoUrl();
+
+        String jwkSetURL();
+
+        String issuer();
+
         String clientId();
 
         @AttributeDefinition(type = AttributeType.PASSWORD)
@@ -57,11 +67,78 @@ public class OidcConnectionImpl implements ClientConnection {
 
     private final Config cfg;
     private final OidcProviderMetadataRegistry metadataRegistry;
+    private final String authorizationEndpoint;
+    private final String tokenEndpoint;
+    private final String userInfoUrl;
+    private final String jwkSetURL;
+    private final String issuer;
+    private final boolean hasBaseUrl;
 
     @Activate
     public OidcConnectionImpl(Config cfg, @Reference OidcProviderMetadataRegistry metadataRegistry) {
         this.cfg = cfg;
         this.metadataRegistry = metadataRegistry;
+        this.authorizationEndpoint = cfg.authorizationEndpoint();
+        this.tokenEndpoint = cfg.tokenEndpoint();
+        this.userInfoUrl = cfg.userInfoUrl();
+        this.jwkSetURL = cfg.jwkSetURL();
+        this.issuer = cfg.issuer();
+
+        // Validate configuration: either baseUrl is provided OR all explicit endpoints are provided
+        hasBaseUrl = !isNullOrEmpty(cfg.baseUrl());
+
+        isValidConfig();
+    }
+
+    /**
+     * Validate configuration.
+     */
+    private void isValidConfig() {
+        // if baseUrl is provided, no manual configuration parameter must be provided
+        if (hasBaseUrl && hasAnyManualConfigurationParameter()) {
+            throw new IllegalArgumentException(
+                    "Either baseUrl OR explicit endpoints "
+                            + "(authorizationEndpoint, tokenEndpoint, userInfoUrl, jwkSetURL, issuer) must be provided, not both");
+        }
+
+        // if baseUrl is not provided, all manual configuration parameters must be provided
+        if (!hasBaseUrl && !hasAllManualConfigurationParameters()) {
+            throw new IllegalArgumentException("Either baseUrl must be provided OR all explicit endpoints "
+                    + "(authorizationEndpoint, tokenEndpoint, userInfoUrl, jwkSetURL, issuer) must be provided");
+        }
+    }
+
+    /**
+     * Return true if any manual configuration parameter is provided.
+     * @return
+     */
+    private boolean hasAnyManualConfigurationParameter() {
+        return !isNullOrEmpty(tokenEndpoint)
+                || !isNullOrEmpty(authorizationEndpoint)
+                || !isNullOrEmpty(userInfoUrl)
+                || !isNullOrEmpty(jwkSetURL)
+                || !isNullOrEmpty(issuer);
+    }
+
+    /**
+     * Return true if all manual configuration parameters are provided.
+     * @return
+     */
+    private boolean hasAllManualConfigurationParameters() {
+        return !isNullOrEmpty(tokenEndpoint)
+                && !isNullOrEmpty(authorizationEndpoint)
+                && !isNullOrEmpty(userInfoUrl)
+                && !isNullOrEmpty(jwkSetURL)
+                && !isNullOrEmpty(issuer);
+    }
+    /**
+     * Checks if a string is null or empty.
+     *
+     * @param str the string to check
+     * @return true if the string is null and not empty, false otherwise
+     */
+    private static boolean isNullOrEmpty(String str) {
+        return str == null || str.isEmpty();
     }
 
     @Override
@@ -70,11 +147,17 @@ public class OidcConnectionImpl implements ClientConnection {
     }
 
     public @NotNull String authorizationEndpoint() {
-        return metadataRegistry.getAuthorizationEndpoint(cfg.baseUrl()).toString();
+        if (hasBaseUrl) {
+            return metadataRegistry.getAuthorizationEndpoint(cfg.baseUrl()).toString();
+        }
+        return authorizationEndpoint;
     }
 
     public @NotNull String tokenEndpoint() {
-        return metadataRegistry.getTokenEndpoint(cfg.baseUrl()).toString();
+        if (hasBaseUrl) {
+            return metadataRegistry.getTokenEndpoint(cfg.baseUrl()).toString();
+        }
+        return tokenEndpoint;
     }
 
     public @NotNull String clientId() {
@@ -100,16 +183,25 @@ public class OidcConnectionImpl implements ClientConnection {
 
     @NotNull
     String userInfoUrl() {
-        return metadataRegistry.getUserInfoEndpoint(cfg.baseUrl()).toString();
+        if (hasBaseUrl) {
+            return metadataRegistry.getUserInfoEndpoint(cfg.baseUrl()).toString();
+        }
+        return userInfoUrl;
     }
 
     @NotNull
     URI jwkSetURL() {
-        return metadataRegistry.getJWKSetURI(cfg.baseUrl());
+        if (hasBaseUrl) {
+            return metadataRegistry.getJWKSetURI(cfg.baseUrl());
+        }
+        return URI.create(jwkSetURL);
     }
 
     @NotNull
     String issuer() {
-        return metadataRegistry.getIssuer(cfg.baseUrl());
+        if (hasBaseUrl) {
+            return metadataRegistry.getIssuer(cfg.baseUrl());
+        }
+        return issuer;
     }
 }
