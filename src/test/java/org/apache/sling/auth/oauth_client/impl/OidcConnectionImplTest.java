@@ -42,12 +42,11 @@ class OidcConnectionImplTest {
     private static final String[] TEST_SCOPES = {"openid", "profile", "email"};
     private static final String[] TEST_ADDITIONAL_PARAMS = {"prompt=consent", "access_type=offline"};
 
-
     /**
      * Helper method to create config with explicit endpoints and custom parameters (baseUrl as empty string)
      */
-    private OidcConnectionImpl.Config createConfigWithExplicitEndpoints(String baseUrl,
-            String clientSecret, String[] scopes, String[] additionalParams) {
+    private OidcConnectionImpl.Config createConfigWithExplicitEndpoints(
+            String baseUrl, String clientSecret, String[] scopes, String[] additionalParams) {
         return Converters.standardConverter()
                 .convert(Map.ofEntries(
                         Map.entry("name", TEST_NAME),
@@ -112,12 +111,13 @@ class OidcConnectionImplTest {
                 .to(OidcConnectionImpl.Config.class);
     }
 
-
     /**
      * Helper method to create OidcConnectionImpl with explicit endpoints config
      */
     private OidcConnectionImpl createConnectionWithExplicitEndpoints() {
-        return new OidcConnectionImpl(createConfigWithExplicitEndpoints(null, TEST_CLIENT_SECRET, TEST_SCOPES, TEST_ADDITIONAL_PARAMS), mock(OidcProviderMetadataRegistry.class));
+        return new OidcConnectionImpl(
+                createConfigWithExplicitEndpoints(null, TEST_CLIENT_SECRET, TEST_SCOPES, TEST_ADDITIONAL_PARAMS),
+                mock(OidcProviderMetadataRegistry.class));
     }
 
     /**
@@ -130,7 +130,8 @@ class OidcConnectionImplTest {
     @Test
     void testConstructorWithExplicitEndpointsThrowsError() {
         // The validation logic prevents using explicit endpoints and baseUrl
-        OidcConnectionImpl.Config config = createConfigWithExplicitEndpoints(TEST_BASE_URL, TEST_CLIENT_SECRET, TEST_SCOPES, TEST_ADDITIONAL_PARAMS);
+        OidcConnectionImpl.Config config = createConfigWithExplicitEndpoints(
+                TEST_BASE_URL, TEST_CLIENT_SECRET, TEST_SCOPES, TEST_ADDITIONAL_PARAMS);
         OidcProviderMetadataRegistry mockRegistry = mock(OidcProviderMetadataRegistry.class);
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
@@ -153,7 +154,6 @@ class OidcConnectionImplTest {
         assertTrue(exception.getMessage().contains("issuer) must be provided"));
     }
 
-
     @Test
     void testAuthorizationEndpointWithBaseUrl() {
         OidcConnectionImpl.Config config = createConfigWithBaseUrl();
@@ -169,7 +169,8 @@ class OidcConnectionImplTest {
 
     @Test
     void testAuthorizationEndpointWithoutBaseUrl() {
-        OidcConnectionImpl.Config config = createConfigWithExplicitEndpoints("", TEST_CLIENT_SECRET, TEST_SCOPES, TEST_ADDITIONAL_PARAMS);
+        OidcConnectionImpl.Config config =
+                createConfigWithExplicitEndpoints("", TEST_CLIENT_SECRET, TEST_SCOPES, TEST_ADDITIONAL_PARAMS);
         OidcProviderMetadataRegistry mockRegistry = mock(OidcProviderMetadataRegistry.class);
         URI expectedAuthEndpoint = URI.create("https://auth.example.com/oauth2/authorize");
         when(mockRegistry.getAuthorizationEndpoint(TEST_BASE_URL)).thenReturn(expectedAuthEndpoint);
@@ -196,7 +197,8 @@ class OidcConnectionImplTest {
 
     @Test
     void testTokenEndpointWithoutBaseUrl() {
-        OidcConnectionImpl.Config config = createConfigWithExplicitEndpoints("", TEST_CLIENT_SECRET, TEST_SCOPES, TEST_ADDITIONAL_PARAMS);
+        OidcConnectionImpl.Config config =
+                createConfigWithExplicitEndpoints("", TEST_CLIENT_SECRET, TEST_SCOPES, TEST_ADDITIONAL_PARAMS);
 
         OidcProviderMetadataRegistry mockRegistry = mock(OidcProviderMetadataRegistry.class);
         URI expectedTokenEndpoint = URI.create("https://auth.example.com/oauth2/token");
@@ -207,7 +209,6 @@ class OidcConnectionImplTest {
         // When baseUrl is present, should fetch from registry
         assertEquals(expectedTokenEndpoint.toString(), connection.tokenEndpoint());
     }
-
 
     @Test
     void testUserInfoUrlWithBaseUrl() {
@@ -225,7 +226,8 @@ class OidcConnectionImplTest {
 
     @Test
     void testUserInfoUrlWithoutBaseUrl() {
-        OidcConnectionImpl.Config config = createConfigWithExplicitEndpoints("", TEST_CLIENT_SECRET, TEST_SCOPES, TEST_ADDITIONAL_PARAMS);
+        OidcConnectionImpl.Config config =
+                createConfigWithExplicitEndpoints("", TEST_CLIENT_SECRET, TEST_SCOPES, TEST_ADDITIONAL_PARAMS);
 
         OidcProviderMetadataRegistry mockRegistry = mock(OidcProviderMetadataRegistry.class);
         URI expectedUserInfoEndpoint = URI.create("https://auth.example.com/oauth2/userinfo");
@@ -253,7 +255,8 @@ class OidcConnectionImplTest {
 
     @Test
     void testJwkSetURLWithoutBaseUrl() {
-        OidcConnectionImpl.Config config = createConfigWithExplicitEndpoints("", TEST_CLIENT_SECRET, TEST_SCOPES, TEST_ADDITIONAL_PARAMS);
+        OidcConnectionImpl.Config config =
+                createConfigWithExplicitEndpoints("", TEST_CLIENT_SECRET, TEST_SCOPES, TEST_ADDITIONAL_PARAMS);
 
         OidcProviderMetadataRegistry mockRegistry = mock(OidcProviderMetadataRegistry.class);
         URI expectedJwkSetURI = URI.create("https://auth.example.com/oauth2/jwks");
@@ -281,7 +284,8 @@ class OidcConnectionImplTest {
 
     @Test
     void testIssuerWithoutBaseUrl() {
-        OidcConnectionImpl.Config config = createConfigWithExplicitEndpoints("", TEST_CLIENT_SECRET, TEST_SCOPES, TEST_ADDITIONAL_PARAMS);
+        OidcConnectionImpl.Config config =
+                createConfigWithExplicitEndpoints("", TEST_CLIENT_SECRET, TEST_SCOPES, TEST_ADDITIONAL_PARAMS);
 
         OidcProviderMetadataRegistry mockRegistry = mock(OidcProviderMetadataRegistry.class);
         String expectedIssuer = "https://auth.example.com";
@@ -292,7 +296,7 @@ class OidcConnectionImplTest {
         // When baseUrl is present, should fetch from registry
         assertEquals(expectedIssuer, connection.issuer());
     }
-    
+
     @Test
     void testNameReturnsConfiguredName() {
         OidcConnectionImpl connection = createConnectionWithBaseUrl();

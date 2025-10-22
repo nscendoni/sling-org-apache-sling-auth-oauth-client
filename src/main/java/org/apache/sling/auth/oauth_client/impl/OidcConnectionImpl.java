@@ -87,7 +87,8 @@ public class OidcConnectionImpl implements ClientConnection {
         // Validate configuration: either baseUrl is provided OR all explicit endpoints are provided
         hasBaseUrl = !isNullOrEmpty(cfg.baseUrl());
 
-        if (hasBaseUrl && !isNullOrEmpty(tokenEndpoint)
+        if (hasBaseUrl
+                && !isNullOrEmpty(tokenEndpoint)
                 && !isNullOrEmpty(authorizationEndpoint)
                 && !isNullOrEmpty(userInfoUrl)
                 && !isNullOrEmpty(jwkSetURL)
@@ -97,7 +98,8 @@ public class OidcConnectionImpl implements ClientConnection {
                             + "(authorizationEndpoint, tokenEndpoint, userInfoUrl, jwkSetURL, issuer) must be provided, not both");
         }
 
-        if (!hasBaseUrl && isNullOrEmpty(tokenEndpoint)
+        if (!hasBaseUrl
+                && isNullOrEmpty(tokenEndpoint)
                 && isNullOrEmpty(authorizationEndpoint)
                 && isNullOrEmpty(userInfoUrl)
                 && isNullOrEmpty(jwkSetURL)
@@ -116,7 +118,6 @@ public class OidcConnectionImpl implements ClientConnection {
     private static boolean isNullOrEmpty(String str) {
         return str == null || str.isEmpty();
     }
-
 
     @Override
     public @NotNull String name() {
