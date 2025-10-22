@@ -42,6 +42,16 @@ public class OidcConnectionImpl implements ClientConnection {
 
         String baseUrl();
 
+        String authorizationEndpoint();
+
+        String tokenEndpoint();
+
+        String userInfoUrl();
+
+        String jwkSetURL();
+
+        String issuer();
+
         String clientId();
 
         @AttributeDefinition(type = AttributeType.PASSWORD)
@@ -57,11 +67,39 @@ public class OidcConnectionImpl implements ClientConnection {
 
     private final Config cfg;
     private final OidcProviderMetadataRegistry metadataRegistry;
+    private final String authorizationEndpoint;
+    private final String tokenEndpoint;
+    private final String userInfoUrl;
+    private final String jwkSetURL;
+    private final String issuer;
 
     @Activate
     public OidcConnectionImpl(Config cfg, @Reference OidcProviderMetadataRegistry metadataRegistry) {
         this.cfg = cfg;
         this.metadataRegistry = metadataRegistry;
+        this.authorizationEndpoint = cfg.authorizationEndpoint();
+        this.tokenEndpoint = cfg.tokenEndpoint();
+        this.userInfoUrl = cfg.userInfoUrl();
+        this.jwkSetURL = cfg.jwkSetURL();
+        this.issuer = cfg.issuer();
+
+        // Validate configuration: either baseUrl is provided OR all explicit endpoints are provided
+        boolean hasBaseUrl = cfg.baseUrl() != null && !cfg.baseUrl().isEmpty();
+        boolean hasExplicitEndpoints = authorizationEndpoint != null
+                && !authorizationEndpoint.isEmpty()
+                && tokenEndpoint != null
+                && !tokenEndpoint.isEmpty()
+                && userInfoUrl != null
+                && !userInfoUrl.isEmpty()
+                && jwkSetURL != null
+                && !jwkSetURL.isEmpty()
+                && issuer != null
+                && !issuer.isEmpty();
+
+        if (!hasBaseUrl && !hasExplicitEndpoints) {
+            throw new IllegalArgumentException("Either baseUrl must be provided OR all explicit endpoints "
+                    + "(authorizationEndpoint, tokenEndpoint, userInfoUrl, jwkSetURL, issuer) must be provided");
+        }
     }
 
     @Override
@@ -70,10 +108,16 @@ public class OidcConnectionImpl implements ClientConnection {
     }
 
     public @NotNull String authorizationEndpoint() {
+        if (cfg.baseUrl() == null || cfg.baseUrl().isEmpty()) {
+            return authorizationEndpoint;
+        }
         return metadataRegistry.getAuthorizationEndpoint(cfg.baseUrl()).toString();
     }
 
     public @NotNull String tokenEndpoint() {
+        if (cfg.baseUrl() == null || cfg.baseUrl().isEmpty()) {
+            return tokenEndpoint;
+        }
         return metadataRegistry.getTokenEndpoint(cfg.baseUrl()).toString();
     }
 
@@ -100,16 +144,25 @@ public class OidcConnectionImpl implements ClientConnection {
 
     @NotNull
     String userInfoUrl() {
+        if (cfg.baseUrl() == null || cfg.baseUrl().isEmpty()) {
+            return userInfoUrl;
+        }
         return metadataRegistry.getUserInfoEndpoint(cfg.baseUrl()).toString();
     }
 
     @NotNull
     URI jwkSetURL() {
+        if (cfg.baseUrl() == null || cfg.baseUrl().isEmpty()) {
+            return URI.create(jwkSetURL);
+        }
         return metadataRegistry.getJWKSetURI(cfg.baseUrl());
     }
 
     @NotNull
     String issuer() {
+        if (cfg.baseUrl() == null || cfg.baseUrl().isEmpty()) {
+            return issuer;
+        }
         return metadataRegistry.getIssuer(cfg.baseUrl());
     }
 }
