@@ -161,7 +161,7 @@ class SlingUserInfoProcessorImplTest {
                         "groupsInIdToken", true,
                         "storeAccessToken", false,
                         "storeRefreshToken", false,
-                        "idpNameInUserId", true,
+                        "idpNameInPrincipals", true,
                         "groupsClaimName", "groups",
                         "connection", "test"))
                 .to(SlingUserInfoProcessorImpl.Config.class);
