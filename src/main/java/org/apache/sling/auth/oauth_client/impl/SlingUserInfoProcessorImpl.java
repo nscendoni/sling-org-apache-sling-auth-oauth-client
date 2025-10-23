@@ -71,8 +71,10 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
         @AttributeDefinition(name = "connection", description = "OIDC Connection Name")
         String connection();
 
-        @AttributeDefinition(name = "idpNameInUserId", description = "Add a suffix with the idp in the username")
-        boolean idpNameInUserId() default false;
+        @AttributeDefinition(
+                name = "idpNameInPrincipals",
+                description = "Add a suffix with the idp in the username and to the groups created by this processor")
+        boolean idpNameInPrincipals() default false;
     }
 
     private static final Logger logger = LoggerFactory.getLogger(SlingUserInfoProcessorImpl.class);
@@ -83,7 +85,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
     private final boolean groupsInIdToken;
     private final String groupsClaimName;
     private final String connection;
-    private final boolean idpNameInUserId;
+    private final boolean idpNameInPrincipals;
 
     @Activate
     public SlingUserInfoProcessorImpl(
@@ -97,7 +99,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
             throw new IllegalArgumentException("Connection name must not be null or empty");
         }
         this.connection = config.connection();
-        this.idpNameInUserId = config.idpNameInUserId();
+        this.idpNameInPrincipals = config.idpNameInPrincipals();
     }
 
     @Override
@@ -114,7 +116,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
 
         // Create AuthenticationInfo object
         OidcAuthCredentials credentials =
-                new OidcAuthCredentials(oidcSubject + (idpNameInUserId ? ";" + idp : ""), idp);
+                new OidcAuthCredentials(oidcSubject + (idpNameInPrincipals ? ";" + idp : ""), idp);
         credentials.setAttribute(".token", "");
 
         if (userInfo != null) {
@@ -184,7 +186,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
 
     @NotNull
     private String getGroupName(@NotNull String idp, Object group) {
-        return group.toString() + (idpNameInUserId ? ";" + idp : "");
+        return group.toString() + (idpNameInPrincipals ? ";" + idp : "");
     }
 
     private static @Nullable UserInfo parseUserInfo(@Nullable String stringUserInfo) {
