@@ -146,9 +146,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
                         .getClaim(groupsClaimName);
                 if (groups instanceof List) {
                     logger.debug("Groups from ID Token: {}", groups);
-                    ((List) groups)
-                            .forEach(group ->
-                                    credentials.addGroup(group.toString() + (idpNameInUserId ? ";" + idp : "")));
+                    ((List) groups).forEach(group -> credentials.addGroup(getGroupName(idp, group)));
                 }
             } catch (java.text.ParseException e) {
                 throw new RuntimeException(e);
