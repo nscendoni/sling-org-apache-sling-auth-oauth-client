@@ -70,6 +70,9 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
 
         @AttributeDefinition(name = "connection", description = "OIDC Connection Name")
         String connection();
+
+        @AttributeDefinition(name = "idpNameInUserId", description = "Add a suffix with the idp in the username")
+        boolean idpNameInUserId() default false;
     }
 
     private static final Logger logger = LoggerFactory.getLogger(SlingUserInfoProcessorImpl.class);
@@ -80,6 +83,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
     private final boolean groupsInIdToken;
     private final String groupsClaimName;
     private final String connection;
+    private final boolean idpNameInUserId;
 
     @Activate
     public SlingUserInfoProcessorImpl(
@@ -93,6 +97,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
             throw new IllegalArgumentException("Connection name must not be null or empty");
         }
         this.connection = config.connection();
+        this.idpNameInUserId = config.idpNameInUserId();
     }
 
     @Override
@@ -108,7 +113,8 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
                 Converter.toSlingOAuthTokens(tokenResponse.toSuccessResponse().getTokens());
 
         // Create AuthenticationInfo object
-        OidcAuthCredentials credentials = new OidcAuthCredentials(oidcSubject, idp);
+        OidcAuthCredentials credentials =
+                new OidcAuthCredentials(oidcSubject + (idpNameInUserId ? ";" + idp : ""), idp);
         credentials.setAttribute(".token", "");
 
         if (userInfo != null) {
@@ -138,7 +144,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
                         .getClaim(groupsClaimName);
                 if (groups instanceof List) {
                     logger.debug("Groups from ID Token: {}", groups);
-                    ((List) groups).forEach(group -> credentials.addGroup(group.toString()));
+                    ((List) groups).forEach(group -> credentials.addGroup(getGroupName(idp, group)));
                 }
             } catch (java.text.ParseException e) {
                 throw new RuntimeException(e);
@@ -150,7 +156,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
                 JSONArray groupJsonArray = (JSONArray) groups;
                 logger.debug("Groups: {}", groups);
                 // Convert the groups in a Set of Strings
-                groupJsonArray.forEach(group -> credentials.addGroup(group.toString()));
+                groupJsonArray.forEach(group -> credentials.addGroup(getGroupName(idp, group)));
             }
         }
         // Store the Access Token on user node
@@ -174,6 +180,11 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
         }
 
         return credentials;
+    }
+
+    @NotNull
+    private String getGroupName(@NotNull String idp, Object group) {
+        return group.toString() + (idpNameInUserId ? ";" + idp : "");
     }
 
     private static @Nullable UserInfo parseUserInfo(@Nullable String stringUserInfo) {
