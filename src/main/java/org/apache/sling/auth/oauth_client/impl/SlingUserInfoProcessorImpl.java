@@ -144,9 +144,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
                         .getClaim(groupsClaimName);
                 if (groups instanceof List) {
                     logger.debug("Groups from ID Token: {}", groups);
-                    ((List) groups)
-                            .forEach(group ->
-                                    credentials.addGroup(group.toString() + (idpNameInUserId ? ";" + idp : "")));
+                    ((List) groups).forEach(group -> credentials.addGroup(getGroupName(idp, group)));
                 }
             } catch (java.text.ParseException e) {
                 throw new RuntimeException(e);
@@ -158,7 +156,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
                 JSONArray groupJsonArray = (JSONArray) groups;
                 logger.debug("Groups: {}", groups);
                 // Convert the groups in a Set of Strings
-                groupJsonArray.forEach(group -> credentials.addGroup(group.toString()));
+                groupJsonArray.forEach(group -> credentials.addGroup(getGroupName(idp, group)));
             }
         }
         // Store the Access Token on user node
@@ -182,6 +180,11 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
         }
 
         return credentials;
+    }
+
+    @NotNull
+    private String getGroupName(@NotNull String idp, Object group) {
+        return group.toString() + (idpNameInUserId ? ";" + idp : "");
     }
 
     private static @Nullable UserInfo parseUserInfo(@Nullable String stringUserInfo) {
