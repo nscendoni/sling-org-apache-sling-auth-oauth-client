@@ -22,7 +22,6 @@ import javax.servlet.Servlet;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletResponse;
 
-import java.io.IOException;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
@@ -72,7 +71,7 @@ public class OAuthEntryPointServlet extends SlingAllMethodsServlet {
 
     @Override
     protected void doGet(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response)
-            throws ServletException, IOException {
+            throws ServletException {
 
         try {
             String desiredConnectionName = request.getParameter("c");
@@ -105,16 +104,30 @@ public class OAuthEntryPointServlet extends SlingAllMethodsServlet {
     }
 
     private @NotNull RedirectTarget getAuthenticationRequestUri(
-            @NotNull ClientConnection connection, @NotNull SlingHttpServletRequest request, @NotNull URI callbackUri) {
+            @NotNull ClientConnection connection, @NotNull SlingHttpServletRequest request, @NotNull URI callbackUri)
+            throws OAuthEntryPointException {
         ResolvedConnection conn = ResolvedOAuthConnection.resolve(connection);
 
         // TODO: Should we redirect to the target url when redirect is null?
         String redirect = request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT);
+        validateRedirect(redirect);
 
         String perRequestKey = new Identifier().getValue();
         OAuthCookieValue oAuthCookieValue = new OAuthCookieValue(perRequestKey, connection.name(), redirect);
 
         return RedirectHelper.buildRedirectTarget(
                 new String[] {PATH}, callbackUri, conn, oAuthCookieValue, cryptoService);
+    }
+
+    private void validateRedirect(String redirect) throws OAuthEntryPointException {
+        // Validate that it is not a cross-site redirect
+        if (redirect == null || redirect.isEmpty()) {
+            return;
+        }
+        if (!redirect.startsWith("/")) {
+            String message = "Invalid redirect URL: " + redirect;
+            // Relative redirect within the same domain is allowed
+            throw new OAuthEntryPointException(message, new IllegalArgumentException(message));
+        }
     }
 }
