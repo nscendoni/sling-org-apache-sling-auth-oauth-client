@@ -36,6 +36,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.Assert.assertThrows;
 
 @ExtendWith(SlingContextExtension.class)
 class OAuthEntryPointServletTest {
@@ -92,6 +93,18 @@ class OAuthEntryPointServletTest {
         URI location = URI.create(Objects.requireNonNull(response.getHeader("Location"), "location header"));
 
         assertThat(location).as("authentication request uri").hasParameter("access_type", "offline");
+    }
+
+    @Test
+    void redirectWithValidConnectionAndInvalidRedirect() throws ServletException, IOException {
+
+        context.request().setQueryString("c=" + MOCK_OIDC_PARAM + "&redirect=http://invalid-url");
+        MockSlingHttpServletResponse response = context.response();
+
+        OAuthEntryPointException exception =
+                assertThrows(OAuthEntryPointException.class, () -> servlet.service(context.request(), response));
+
+        assertThat(exception.getMessage()).as("Expected exception message").contains("Internal error");
     }
 
     @Test
