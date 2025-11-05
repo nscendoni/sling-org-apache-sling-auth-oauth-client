@@ -87,7 +87,7 @@ public class MySlingServlet extends OAuthEnabledSlingServlet {
     protected void doGetWithToken(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response,
             OAuthToken token) throws IOException, ServletException {
 
-        this.csv.query("my-query", token.getValue()).writeResponseTo(response.getOutputStream());
+        this.svc.query("my-query", token.getValue()).writeResponseTo(response.getOutputStream());
     }
 }
 ```
@@ -200,14 +200,14 @@ Validated providers:
 
 - Google, OIDC, with base URL of https://accounts.google.com , see [Google OIDC documentation](https://developers.google.com/identity/protocols/oauth2/openid-connect)
 - GitHub, OAuth 2.0, with authorizationEndpoint https://github.com/login/oauth/authorize and tokenEndpoint https://github.com/login/oauth/access_token
-- KeyCloak ( see [#keycloak] )
+- KeyCloak ( see [Keycloak](#keycloak) )
 - Microsoft, OIDC, with base URL of https://login.microsoftonline.com/$TENANT\_ID/v2.0. see [Microsoft OIDC documentation](https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-protocols-oidc)
 - Adobe IMS, OAuth 2.0, with authorizationEndpoint https://ims-na1.adobelogin.com/ims/authorize/v3 and tokenEndpoint https://ims-na1.adobelogin.com/ims/token/v1
 
 ### Deployment
 
 A set of dependencies required by this bundle, on top of the Sling Starter ones, is available at `src/main/features/main.json`.
-For the tokens to be stored in Redis ( see [#redis-storage] ) an additional feature with dependencies is found at `src/main/features/redis.json`. 
+For the tokens to be stored in Redis ( see [Redis storage](#redis-storage) ) an additional feature with dependencies is found at `src/main/features/redis.json`. 
 
 Since the bundle relies on encryption to create and validate the OAuth 2.0 `state` parameter, a `CryptoService` must be configured
 
