@@ -27,7 +27,7 @@
     </parent>
 
     <artifactId>org.apache.sling.auth.oauth-client</artifactId>
-    <version>0.1.5-SNAPSHOT</version>
+    <version>0.1.6</version>
 
     <name>Apache Sling OAuth Client</name>
     <description>Apache Sling OAuth 2.0 client with OIDC support</description>
@@ -35,13 +35,13 @@
     <scm>
         <connection>scm:git:https://gitbox.apache.org/repos/asf/sling-org-apache-sling-auth-oauth-client.git</connection>
         <developerConnection>scm:git:https://gitbox.apache.org/repos/asf/sling-org-apache-sling-auth-oauth-client.git</developerConnection>
-        <tag>org.apache.sling.auth.oauth-client-0.1.0</tag>
+        <tag>org.apache.sling.auth.oauth-client-0.1.6</tag>
         <url>https://github.com/apache/sling-org-apache-sling-auth-oauth-client.git</url>
     </scm>
 
     <properties>
         <sling.java.version>11</sling.java.version>
-        <project.build.outputTimestamp>1761060051</project.build.outputTimestamp>
+        <project.build.outputTimestamp>1763123464</project.build.outputTimestamp>
         <it.startTimeoutSeconds>60</it.startTimeoutSeconds>
     </properties>
     <dependencies>
