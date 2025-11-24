@@ -85,4 +85,64 @@ class RedirectHelperTest {
         String result = RedirectHelper.findLongestPathMatching(paths, url);
         assertEquals("/a/b", result);
     }
+
+    @Test
+    void testValidateRedirectWithValidRelativeUrl() throws OAuthEntryPointException {
+        // Should not throw exception for valid relative URLs
+        RedirectHelper.validateRedirect("/valid/path");
+        RedirectHelper.validateRedirect("/another/valid/path");
+        RedirectHelper.validateRedirect("/");
+    }
+
+    @Test
+    void testValidateRedirectWithNullUrl() throws OAuthEntryPointException {
+        // Should not throw exception for null URL
+        RedirectHelper.validateRedirect(null);
+    }
+
+    @Test
+    void testValidateRedirectWithEmptyUrl() throws OAuthEntryPointException {
+        // Should not throw exception for empty URL
+        RedirectHelper.validateRedirect("");
+    }
+
+    @Test
+    void testValidateRedirectWithInvalidAbsoluteUrl() {
+        // Should throw exception for absolute URLs (cross-site redirect)
+        OAuthEntryPointException exception = assertThrows(
+                OAuthEntryPointException.class, () -> RedirectHelper.validateRedirect("http://example.com/path"));
+
+        assertTrue(exception.getMessage().contains("Invalid redirect URL"));
+        assertTrue(exception.getCause() instanceof IllegalArgumentException);
+    }
+
+    @Test
+    void testValidateRedirectWithInvalidHttpsUrl() {
+        // Should throw exception for HTTPS URLs (cross-site redirect)
+        OAuthEntryPointException exception = assertThrows(
+                OAuthEntryPointException.class, () -> RedirectHelper.validateRedirect("https://example.com/path"));
+
+        assertTrue(exception.getMessage().contains("Invalid redirect URL"));
+        assertTrue(exception.getCause() instanceof IllegalArgumentException);
+    }
+
+    @Test
+    void testValidateRedirectWithInvalidProtocolUrl() {
+        // Should throw exception for other protocols
+        OAuthEntryPointException exception = assertThrows(
+                OAuthEntryPointException.class, () -> RedirectHelper.validateRedirect("ftp://example.com/path"));
+
+        assertTrue(exception.getMessage().contains("Invalid redirect URL"));
+        assertTrue(exception.getCause() instanceof IllegalArgumentException);
+    }
+
+    @Test
+    void testValidateRedirectWithJavaScriptUrl() {
+        // Should throw exception for javascript: URLs
+        OAuthEntryPointException exception = assertThrows(
+                OAuthEntryPointException.class, () -> RedirectHelper.validateRedirect("javascript:alert('xss')"));
+
+        assertTrue(exception.getMessage().contains("Invalid redirect URL"));
+        assertTrue(exception.getCause() instanceof IllegalArgumentException);
+    }
 }

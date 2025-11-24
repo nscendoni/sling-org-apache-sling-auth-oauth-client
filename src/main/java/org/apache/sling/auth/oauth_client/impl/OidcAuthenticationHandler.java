@@ -493,18 +493,38 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         } catch (IOException e) {
             logger.error("Error while redirecting to default redirect: {}", e.getMessage(), e);
             throw new RuntimeException(e);
+        } catch (OAuthEntryPointException e) {
+            logger.warn("Invalid uri to redirect after login:: {}", e.getMessage(), e);
+            throw new RuntimeException(e);
         }
     }
 
     private @NotNull RedirectTarget getAuthenticationRequestUri(
-            @NotNull ClientConnection connection, @NotNull HttpServletRequest request, @NotNull URI callbackUri) {
+            @NotNull ClientConnection connection, @NotNull HttpServletRequest request, @NotNull URI callbackUri)
+            throws OAuthEntryPointException {
 
         ResolvedConnection conn = ResolvedOidcConnection.resolve(connection);
 
         // The client ID provisioned by the OpenID provider when
         // the client was registered is stored in the connection.
 
-        String redirect = request.getRequestURI();
+        // Read if there is a parameter to the url where we need to redirect the user after authentication
+        String redirect = request.getParameter(RedirectHelper.PARAMETER_NAME_OIDC_REDIRECT);
+        if (redirect != null && !redirect.isEmpty()) {
+            // Validate that it is not an absolute url
+            RedirectHelper.validateRedirect(redirect);
+        } else {
+            // If the redirect is not passed as parameter,
+            // then after the authentication redirect to the requested uri
+
+            // Extract path and query from the uri
+            redirect = request.getRequestURI();
+            String queryString = request.getQueryString();
+            if (queryString != null && !queryString.isEmpty()) {
+                redirect = redirect + "?" + queryString;
+            }
+        }
+
         String perRequestKey = new Identifier().getValue();
         Nonce nonce = new Nonce(new Identifier().getValue());
         CodeVerifier codeVerifier = null;
