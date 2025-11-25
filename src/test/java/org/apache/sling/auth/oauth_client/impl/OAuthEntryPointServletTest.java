@@ -96,7 +96,7 @@ class OAuthEntryPointServletTest {
     }
 
     @Test
-    void redirectWithValidConnectionAndInvalidRedirect() throws ServletException, IOException {
+    void redirectWithValidConnectionAndInvalidRedirect() {
 
         context.request().setQueryString("c=" + MOCK_OIDC_PARAM + "&redirect=http://invalid-url");
         MockSlingHttpServletResponse response = context.response();
@@ -121,7 +121,7 @@ class OAuthEntryPointServletTest {
     }
 
     @Test
-    void redirectWithValidConnectionAndHttpsRedirect() throws ServletException, IOException {
+    void redirectWithValidConnectionAndHttpsRedirect() {
 
         context.request().setQueryString("c=" + MOCK_OIDC_PARAM + "&redirect=https://malicious.com");
         MockSlingHttpServletResponse response = context.response();
@@ -134,7 +134,7 @@ class OAuthEntryPointServletTest {
     }
 
     @Test
-    void redirectWithValidConnectionAndJavaScriptRedirect() throws ServletException, IOException {
+    void redirectWithValidConnectionAndJavaScriptRedirect() {
 
         context.request().setQueryString("c=" + MOCK_OIDC_PARAM + "&redirect=javascript:alert('xss')");
         MockSlingHttpServletResponse response = context.response();
