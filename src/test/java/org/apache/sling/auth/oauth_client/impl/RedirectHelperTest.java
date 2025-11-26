@@ -19,6 +19,8 @@
 package org.apache.sling.auth.oauth_client.impl;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -116,31 +118,18 @@ class RedirectHelperTest {
         assertTrue(exception.getCause() instanceof IllegalArgumentException);
     }
 
-    @Test
-    void testValidateRedirectWithInvalidHttpsUrl() {
-        // Should throw exception for HTTPS URLs (cross-site redirect)
-        OAuthEntryPointException exception = assertThrows(
-                OAuthEntryPointException.class, () -> RedirectHelper.validateRedirect("https://example.com/path"));
-
-        assertTrue(exception.getMessage().contains("Invalid redirect URL"));
-        assertTrue(exception.getCause() instanceof IllegalArgumentException);
-    }
-
-    @Test
-    void testValidateRedirectWithInvalidProtocolUrl() {
-        // Should throw exception for other protocols
-        OAuthEntryPointException exception = assertThrows(
-                OAuthEntryPointException.class, () -> RedirectHelper.validateRedirect("ftp://example.com/path"));
-
-        assertTrue(exception.getMessage().contains("Invalid redirect URL"));
-        assertTrue(exception.getCause() instanceof IllegalArgumentException);
-    }
-
-    @Test
-    void testValidateRedirectWithJavaScriptUrl() {
-        // Should throw exception for javascript: URLs
-        OAuthEntryPointException exception = assertThrows(
-                OAuthEntryPointException.class, () -> RedirectHelper.validateRedirect("javascript:alert('xss')"));
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "//example.com/path",
+                "https://example.com/path",
+                "ftp://example.com/path",
+                "javascript:alert('xss')"
+            })
+    void testValidateRedirectWithInvalidUrl(String url) {
+        // Should throw exception for absolute URLs (cross-site redirect)
+        OAuthEntryPointException exception =
+                assertThrows(OAuthEntryPointException.class, () -> RedirectHelper.validateRedirect(url));
 
         assertTrue(exception.getMessage().contains("Invalid redirect URL"));
         assertTrue(exception.getCause() instanceof IllegalArgumentException);

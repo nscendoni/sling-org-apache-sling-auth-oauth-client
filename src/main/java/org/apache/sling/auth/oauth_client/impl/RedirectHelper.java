@@ -40,7 +40,6 @@ import org.slf4j.LoggerFactory;
 class RedirectHelper {
 
     static final String PARAMETER_NAME_REDIRECT = "redirect";
-    static final String PARAMETER_NAME_OIDC_REDIRECT = "oidc_request_path";
 
     // We don't want leave the cookie lying around for a long time because it is not needed.
     // At the same time, some OAuth user authentication flows take a long time due to
@@ -151,7 +150,7 @@ class RedirectHelper {
         if (redirect == null || redirect.isEmpty()) {
             return;
         }
-        if (!redirect.startsWith("/")) {
+        if (!redirect.startsWith("/") || redirect.startsWith("//")) {
             String message = "Invalid redirect URL: " + redirect;
             // Relative redirect within the same domain is allowed
             throw new OAuthEntryPointException(message, new IllegalArgumentException(message));

@@ -874,7 +874,7 @@ class OidcAuthenticationHandlerTest {
         doThrow(new IOException("Mocked Exception")).when(response).sendRedirect(anyString());
         RuntimeException exception = assertThrows(
                 RuntimeException.class, () -> oidcAuthenticationHandler.requestCredentials(request, response));
-        assertEquals("java.io.IOException: Mocked Exception", exception.getMessage());
+        assertEquals("Error while redirecting to default redirect: Mocked Exception", exception.getMessage());
     }
 
     @Test
@@ -925,7 +925,7 @@ class OidcAuthenticationHandlerTest {
                 assertFalse(mockResponse.getHeader("location").contains("code_verifier="));
 
                 // Verify that the redirect URI in the cookie is correct
-                assertTrue(oauthCookieValue.redirect().equals("/"));
+                assertEquals("/", oauthCookieValue.redirect());
                 return true;
             }
             return false;
@@ -995,7 +995,7 @@ class OidcAuthenticationHandlerTest {
                                 .split("&")[0]));
 
                 // Verify the redirect URI in the cookie is correct
-                assertTrue(cookieParts[OAuthCookieValue.REDIRECT_INDEX].equals("/"));
+                assertEquals("/", cookieParts[OAuthCookieValue.REDIRECT_INDEX]);
 
                 // Verify that the callbackUri is correct
                 assertTrue(mockResponse.getHeader("location").contains("redirect_uri=http%3A%2F%2Fredirect"));
@@ -1141,7 +1141,7 @@ class OidcAuthenticationHandlerTest {
 
         // Test with oidc_request_path parameter
         when(request.getParameter("c")).thenReturn(MOCK_OIDC_PARAM);
-        when(request.getParameter(RedirectHelper.PARAMETER_NAME_OIDC_REDIRECT)).thenReturn("/custom/path");
+        when(request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT)).thenReturn("/custom/path");
         when(request.getRequestURI()).thenReturn("/localhost");
         MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
 
@@ -1186,7 +1186,7 @@ class OidcAuthenticationHandlerTest {
 
         // Test with invalid oidc_request_path parameter (absolute URL)
         when(request.getParameter("c")).thenReturn(MOCK_OIDC_PARAM);
-        when(request.getParameter(RedirectHelper.PARAMETER_NAME_OIDC_REDIRECT)).thenReturn("http://malicious.com");
+        when(request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT)).thenReturn("http://malicious.com");
         when(request.getRequestURI()).thenReturn("/path");
         MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
 
@@ -1226,7 +1226,7 @@ class OidcAuthenticationHandlerTest {
 
         // Test with null oidc_request_path parameter - should fall back to requestURI
         when(request.getParameter("c")).thenReturn(MOCK_OIDC_PARAM);
-        when(request.getParameter(RedirectHelper.PARAMETER_NAME_OIDC_REDIRECT)).thenReturn(null);
+        when(request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT)).thenReturn(null);
         when(request.getRequestURI()).thenReturn("/fallback/path");
         MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
 

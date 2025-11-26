@@ -491,11 +491,10 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             response.sendRedirect(redirect.uri().toString());
             return true;
         } catch (IOException e) {
-            logger.error("Error while redirecting to default redirect: {}", e.getMessage(), e);
-            throw new RuntimeException(e);
+            throw new RuntimeException(
+                    String.format("Error while redirecting to default redirect: %s", e.getMessage()), e);
         } catch (OAuthEntryPointException e) {
-            logger.warn("Invalid uri to redirect after login:: {}", e.getMessage(), e);
-            throw new RuntimeException(e);
+            throw new RuntimeException(String.format("Invalid uri to redirect after login:: %s", e.getMessage()), e);
         }
     }
 
@@ -509,7 +508,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         // the client was registered is stored in the connection.
 
         // Read if there is a parameter to the url where we need to redirect the user after authentication
-        String redirect = request.getParameter(RedirectHelper.PARAMETER_NAME_OIDC_REDIRECT);
+        String redirect = request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT);
         if (redirect != null && !redirect.isEmpty()) {
             // Validate that it is not an absolute url
             RedirectHelper.validateRedirect(redirect);
