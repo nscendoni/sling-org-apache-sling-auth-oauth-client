@@ -219,9 +219,22 @@ class AuthorizationCodeFlowIT {
         sling.doGet(userPath + "/oauth-tokens/" + oidcConnectionName, 404);
 
         // kick off oidc auth
-        SlingHttpResponse entryPointResponse = sling.doGet(
-                "/system/sling/oauth/entry-point", List.of(new BasicNameValuePair("c", oidcConnectionName)), 302);
-        Header locationHeader = entryPointResponse.getFirstHeader("location");
+        // Retry the request a few times to ensure that the osgi configuration have been applied
+        SlingHttpResponse entryPointResponse = null;
+        Header locationHeader = null;
+        for (int count = 0; count < MAX_RETRY; count++) {
+
+            entryPointResponse = sling.doGet(
+                    "/system/sling/oauth/entry-point", List.of(new BasicNameValuePair("c", oidcConnectionName)), 302);
+            locationHeader = entryPointResponse.getFirstHeader("location");
+            if (locationHeader.getValue().startsWith("http://localhost:" + keycloakPort)) {
+                // If the location header starts with the keycloak port, we can break out of the loop
+                break;
+            }
+            // Otherwise, we wait for a while and retry
+            Thread.sleep(100);
+        }
+
         assertThat(locationHeader.getElements())
                 .as("Location header value from entry-point request")
                 .singleElement()
