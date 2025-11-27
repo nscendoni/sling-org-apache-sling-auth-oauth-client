@@ -110,24 +110,12 @@ public class OAuthEntryPointServlet extends SlingAllMethodsServlet {
 
         // TODO: Should we redirect to the target url when redirect is null?
         String redirect = request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT);
-        validateRedirect(redirect);
+        RedirectHelper.validateRedirect(redirect);
 
         String perRequestKey = new Identifier().getValue();
         OAuthCookieValue oAuthCookieValue = new OAuthCookieValue(perRequestKey, connection.name(), redirect);
 
         return RedirectHelper.buildRedirectTarget(
                 new String[] {PATH}, callbackUri, conn, oAuthCookieValue, cryptoService);
-    }
-
-    private void validateRedirect(String redirect) throws OAuthEntryPointException {
-        // Validate that it is not a cross-site redirect
-        if (redirect == null || redirect.isEmpty()) {
-            return;
-        }
-        if (!redirect.startsWith("/")) {
-            String message = "Invalid redirect URL: " + redirect;
-            // Relative redirect within the same domain is allowed
-            throw new OAuthEntryPointException(message, new IllegalArgumentException(message));
-        }
     }
 }

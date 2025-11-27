@@ -276,9 +276,6 @@ class OidcAuthenticationHandlerTest {
             exchange.close();
         });
 
-        // This is the class used by Sling to configure the Authentication Handler
-        OidcProviderMetadataRegistry oidcProviderMetadataRegistry = mock(OidcProviderMetadataRegistry.class);
-
         connections.add(new MockOidcConnection(
                 new String[] {"openid"},
                 MOCK_OIDC_PARAM,
@@ -872,12 +869,12 @@ class OidcAuthenticationHandlerTest {
 
         // Test the Exception on response
         response = mock(HttpServletResponse.class);
-        when(request.getRequestURI()).thenReturn("http://localhost:8080");
+        when(request.getRequestURI()).thenReturn("/");
         // mock to trow an exception when response.sendRedirect is called
         doThrow(new IOException("Mocked Exception")).when(response).sendRedirect(anyString());
         RuntimeException exception = assertThrows(
                 RuntimeException.class, () -> oidcAuthenticationHandler.requestCredentials(request, response));
-        assertEquals("java.io.IOException: Mocked Exception", exception.getMessage());
+        assertEquals("Error while redirecting to default redirect: Mocked Exception", exception.getMessage());
     }
 
     @Test
@@ -905,7 +902,7 @@ class OidcAuthenticationHandlerTest {
         when(config.callbackUri()).thenReturn("http://redirect");
         when(config.pkceEnabled()).thenReturn(false);
 
-        when(request.getRequestURI()).thenReturn("http://localhost");
+        when(request.getRequestURI()).thenReturn("/");
         MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
 
         createOidcAuthenticationHandler();
@@ -928,7 +925,7 @@ class OidcAuthenticationHandlerTest {
                 assertFalse(mockResponse.getHeader("location").contains("code_verifier="));
 
                 // Verify that the redirect URI in the cookie is correct
-                assertTrue(oauthCookieValue.redirect().equals("http://localhost"));
+                assertEquals("/", oauthCookieValue.redirect());
                 return true;
             }
             return false;
@@ -964,7 +961,7 @@ class OidcAuthenticationHandlerTest {
         when(config.pkceEnabled()).thenReturn(true);
         when(config.path()).thenReturn(new String[] {"/"});
 
-        when(request.getRequestURI()).thenReturn("http://localhost");
+        when(request.getRequestURI()).thenReturn("/");
 
         createOidcAuthenticationHandler();
         assertTrue(oidcAuthenticationHandler.requestCredentials(request, mockResponse));
@@ -998,7 +995,7 @@ class OidcAuthenticationHandlerTest {
                                 .split("&")[0]));
 
                 // Verify the redirect URI in the cookie is correct
-                assertTrue(cookieParts[OAuthCookieValue.REDIRECT_INDEX].equals("http://localhost"));
+                assertEquals("/", cookieParts[OAuthCookieValue.REDIRECT_INDEX]);
 
                 // Verify that the callbackUri is correct
                 assertTrue(mockResponse.getHeader("location").contains("redirect_uri=http%3A%2F%2Fredirect"));
@@ -1057,7 +1054,7 @@ class OidcAuthenticationHandlerTest {
 
     @Test
     void authenticationSucceededLoginManagerWithLoginCookie() {
-        when(request.getRequestURI()).thenReturn("http://localhost:8080");
+        when(request.getRequestURI()).thenReturn("/path");
         when(loginCookieManager.getLoginCookie(request)).thenReturn(new Cookie("test", "test"));
         createOidcAuthenticationHandler();
         assertFalse(oidcAuthenticationHandler.authenticationSucceeded(
@@ -1115,5 +1112,135 @@ class OidcAuthenticationHandlerTest {
         assertEquals(
                 "Unable to resolve ClientConnection (name=test) of type org.apache.sling.auth.oauth_client.impl.OAuthConnectionImpl",
                 exception.getMessage());
+    }
+
+    @Test
+    void requestCredentialsWithOidcRequestPathParameter() {
+        // This is the class used by Sling to configure the Authentication Handler
+        OidcProviderMetadataRegistry oidcProviderMetadataRegistry = mock(OidcProviderMetadataRegistry.class);
+        String mockIdPUrl = "http://localhost:8080";
+        when(oidcProviderMetadataRegistry.getJWKSetURI(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/jwks.json"));
+        when(oidcProviderMetadataRegistry.getIssuer(mockIdPUrl)).thenReturn(ISSUER);
+        when(oidcProviderMetadataRegistry.getAuthorizationEndpoint(mockIdPUrl))
+                .thenReturn(URI.create(mockIdPUrl + "/authorize"));
+        when(oidcProviderMetadataRegistry.getTokenEndpoint(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/token"));
+
+        connections.add(new MockOidcConnection(
+                new String[] {"openid"},
+                MOCK_OIDC_PARAM,
+                "client-id",
+                "client-secret",
+                "http://localhost:8080",
+                new String[] {"access_type=offline"},
+                oidcProviderMetadataRegistry));
+
+        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
+        when(config.callbackUri()).thenReturn("http://redirect");
+        when(config.pkceEnabled()).thenReturn(false);
+        when(config.path()).thenReturn(new String[] {"/"});
+
+        // Test with oidc_request_path parameter
+        when(request.getParameter("c")).thenReturn(MOCK_OIDC_PARAM);
+        when(request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT)).thenReturn("/custom/path");
+        when(request.getRequestURI()).thenReturn("/localhost");
+        MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
+
+        createOidcAuthenticationHandler();
+        assertTrue(oidcAuthenticationHandler.requestCredentials(request, mockResponse));
+
+        // Verify that the custom redirect path is used in the cookie
+        assertTrue(Arrays.stream(mockResponse.getCookies()).anyMatch(cookie -> {
+            if (OAuthCookieValue.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName())) {
+                OAuthCookieValue oauthCookieValue = new OAuthCookieValue(cookie.getValue(), cryptoService);
+                assertEquals("/custom/path", oauthCookieValue.redirect());
+                return true;
+            }
+            return false;
+        }));
+    }
+
+    @Test
+    void requestCredentialsWithInvalidOidcRequestPath() {
+        // This is the class used by Sling to configure the Authentication Handler
+        OidcProviderMetadataRegistry oidcProviderMetadataRegistry = mock(OidcProviderMetadataRegistry.class);
+        String mockIdPUrl = "http://localhost:8080";
+        when(oidcProviderMetadataRegistry.getJWKSetURI(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/jwks.json"));
+        when(oidcProviderMetadataRegistry.getIssuer(mockIdPUrl)).thenReturn(ISSUER);
+        when(oidcProviderMetadataRegistry.getAuthorizationEndpoint(mockIdPUrl))
+                .thenReturn(URI.create(mockIdPUrl + "/authorize"));
+        when(oidcProviderMetadataRegistry.getTokenEndpoint(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/token"));
+
+        connections.add(new MockOidcConnection(
+                new String[] {"openid"},
+                MOCK_OIDC_PARAM,
+                "client-id",
+                "client-secret",
+                "http://localhost:8080",
+                new String[] {"access_type=offline"},
+                oidcProviderMetadataRegistry));
+
+        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
+        when(config.callbackUri()).thenReturn("http://redirect");
+        when(config.pkceEnabled()).thenReturn(false);
+        when(config.path()).thenReturn(new String[] {"/"});
+
+        // Test with invalid oidc_request_path parameter (absolute URL)
+        when(request.getParameter("c")).thenReturn(MOCK_OIDC_PARAM);
+        when(request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT)).thenReturn("http://malicious.com");
+        when(request.getRequestURI()).thenReturn("/path");
+        MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
+
+        createOidcAuthenticationHandler();
+
+        RuntimeException exception = assertThrows(
+                RuntimeException.class, () -> oidcAuthenticationHandler.requestCredentials(request, mockResponse));
+
+        assertTrue(exception.getCause() instanceof OAuthEntryPointException);
+        assertTrue(exception.getCause().getMessage().contains("Invalid redirect URL"));
+    }
+
+    @Test
+    void requestCredentialsWithNullOidcRequestPathFallsBackToRequestURI() {
+        // This is the class used by Sling to configure the Authentication Handler
+        OidcProviderMetadataRegistry oidcProviderMetadataRegistry = mock(OidcProviderMetadataRegistry.class);
+        String mockIdPUrl = "http://localhost:8080";
+        when(oidcProviderMetadataRegistry.getJWKSetURI(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/jwks.json"));
+        when(oidcProviderMetadataRegistry.getIssuer(mockIdPUrl)).thenReturn(ISSUER);
+        when(oidcProviderMetadataRegistry.getAuthorizationEndpoint(mockIdPUrl))
+                .thenReturn(URI.create(mockIdPUrl + "/authorize"));
+        when(oidcProviderMetadataRegistry.getTokenEndpoint(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/token"));
+
+        connections.add(new MockOidcConnection(
+                new String[] {"openid"},
+                MOCK_OIDC_PARAM,
+                "client-id",
+                "client-secret",
+                "http://localhost:8080",
+                new String[] {"access_type=offline"},
+                oidcProviderMetadataRegistry));
+
+        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
+        when(config.callbackUri()).thenReturn("http://redirect");
+        when(config.pkceEnabled()).thenReturn(false);
+        when(config.path()).thenReturn(new String[] {"/"});
+
+        // Test with null oidc_request_path parameter - should fall back to requestURI
+        when(request.getParameter("c")).thenReturn(MOCK_OIDC_PARAM);
+        when(request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT)).thenReturn(null);
+        when(request.getRequestURI()).thenReturn("/fallback/path");
+        MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
+
+        createOidcAuthenticationHandler();
+        assertTrue(oidcAuthenticationHandler.requestCredentials(request, mockResponse));
+
+        // Verify that the request URI is used as fallback in the cookie
+        assertTrue(Arrays.stream(mockResponse.getCookies()).anyMatch(cookie -> {
+            if (OAuthCookieValue.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName())) {
+                OAuthCookieValue oauthCookieValue = new OAuthCookieValue(cookie.getValue(), cryptoService);
+                assertEquals("/fallback/path", oauthCookieValue.redirect());
+                return true;
+            }
+            return false;
+        }));
     }
 }

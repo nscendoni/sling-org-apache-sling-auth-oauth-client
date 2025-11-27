@@ -96,7 +96,7 @@ class OAuthEntryPointServletTest {
     }
 
     @Test
-    void redirectWithValidConnectionAndInvalidRedirect() throws ServletException, IOException {
+    void redirectWithValidConnectionAndInvalidRedirect() {
 
         context.request().setQueryString("c=" + MOCK_OIDC_PARAM + "&redirect=http://invalid-url");
         MockSlingHttpServletResponse response = context.response();
@@ -105,6 +105,71 @@ class OAuthEntryPointServletTest {
                 assertThrows(OAuthEntryPointException.class, () -> servlet.service(context.request(), response));
 
         assertThat(exception.getMessage()).as("Expected exception message").contains("Internal error");
+    }
+
+    @Test
+    void redirectWithValidConnectionAndValidRelativeRedirect() throws ServletException, IOException {
+
+        context.request().setQueryString("c=" + MOCK_OIDC_PARAM + "&redirect=/valid/path");
+        MockSlingHttpServletResponse response = context.response();
+
+        servlet.service(context.request(), response);
+
+        URI location = URI.create(Objects.requireNonNull(response.getHeader("Location"), "location header"));
+        assertThat(location).as("authentication request uri").hasScheme("http");
+        assertThat(response.getStatus()).as("response status").isEqualTo(HttpServletResponse.SC_FOUND);
+    }
+
+    @Test
+    void redirectWithValidConnectionAndHttpsRedirect() {
+
+        context.request().setQueryString("c=" + MOCK_OIDC_PARAM + "&redirect=https://malicious.com");
+        MockSlingHttpServletResponse response = context.response();
+
+        OAuthEntryPointException exception =
+                assertThrows(OAuthEntryPointException.class, () -> servlet.service(context.request(), response));
+
+        assertThat(exception.getMessage()).as("Expected exception message").contains("Internal error");
+        assertThat(exception.getCause()).as("Expected cause").isInstanceOf(OAuthEntryPointException.class);
+    }
+
+    @Test
+    void redirectWithValidConnectionAndJavaScriptRedirect() {
+
+        context.request().setQueryString("c=" + MOCK_OIDC_PARAM + "&redirect=javascript:alert('xss')");
+        MockSlingHttpServletResponse response = context.response();
+
+        OAuthEntryPointException exception =
+                assertThrows(OAuthEntryPointException.class, () -> servlet.service(context.request(), response));
+
+        assertThat(exception.getMessage()).as("Expected exception message").contains("Internal error");
+        assertThat(exception.getCause()).as("Expected cause").isInstanceOf(OAuthEntryPointException.class);
+    }
+
+    @Test
+    void redirectWithValidConnectionAndNullRedirect() throws ServletException, IOException {
+
+        context.request().setQueryString("c=" + MOCK_OIDC_PARAM);
+        MockSlingHttpServletResponse response = context.response();
+
+        servlet.service(context.request(), response);
+
+        URI location = URI.create(Objects.requireNonNull(response.getHeader("Location"), "location header"));
+        assertThat(location).as("authentication request uri").hasScheme("http");
+        assertThat(response.getStatus()).as("response status").isEqualTo(HttpServletResponse.SC_FOUND);
+    }
+
+    @Test
+    void redirectWithValidConnectionAndEmptyRedirect() throws ServletException, IOException {
+
+        context.request().setQueryString("c=" + MOCK_OIDC_PARAM + "&redirect=");
+        MockSlingHttpServletResponse response = context.response();
+
+        servlet.service(context.request(), response);
+
+        URI location = URI.create(Objects.requireNonNull(response.getHeader("Location"), "location header"));
+        assertThat(location).as("authentication request uri").hasScheme("http");
+        assertThat(response.getStatus()).as("response status").isEqualTo(HttpServletResponse.SC_FOUND);
     }
 
     @Test

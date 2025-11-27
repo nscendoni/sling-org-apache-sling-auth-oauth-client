@@ -271,7 +271,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                             "UserInfo error. Received code: {}, message: {}",
                             userInfoResponse.toErrorResponse().getErrorObject().getCode(),
                             userInfoResponse.toErrorResponse().getErrorObject().getDescription());
-                    throw new RuntimeException(
+                    throw new OidcAuthenticationHandlerException(
                             toErrorMessage("Error in userinfo response", userInfoResponse.toErrorResponse()));
                 }
 
@@ -294,7 +294,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
             } catch (IOException | URISyntaxException | ParseException e) {
                 logger.error("Error while processing UserInfo: {}", e.getMessage(), e);
-                throw new RuntimeException(e);
+                throw new OidcAuthenticationHandlerException(e);
             }
         } else {
             UserInfoProcessor userInfoProcessor = userInfoProcessors.get(connection.name());
@@ -385,18 +385,20 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                         "Token error. Received code: {}, message: {}",
                         tokenResponse.toErrorResponse().getErrorObject().getCode(),
                         tokenResponse.toErrorResponse().getErrorObject().getDescription());
-                throw new RuntimeException(toErrorMessage("Error in token response", tokenResponse.toErrorResponse()));
+                throw new OidcAuthenticationHandlerException(
+                        toErrorMessage("Error in token response", tokenResponse.toErrorResponse()));
             }
             return tokenResponse.toSuccessResponse();
         } catch (URISyntaxException e) {
             logger.error("Token Endpoint is not a valid URI: {} Error: {}", conn.tokenEndpoint(), e.getMessage());
-            throw new RuntimeException(String.format("Token Endpoint is not a valid URI: %s", conn.tokenEndpoint()));
+            throw new OidcAuthenticationHandlerException(
+                    String.format("Token Endpoint is not a valid URI: %s", conn.tokenEndpoint()));
         } catch (IOException e) {
             logger.error("Failed to exchange authorization code for access token: {}", e.getMessage(), e);
-            throw new RuntimeException(e);
+            throw new OidcAuthenticationHandlerException(e);
         } catch (ParseException e) {
             logger.error("Failed to parse token response: {}", e.getMessage(), e);
-            throw new RuntimeException(e.getMessage());
+            throw new OidcAuthenticationHandlerException(e.getMessage());
         }
     }
 
@@ -443,7 +445,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                     tokenResponse.toSuccessResponse().getTokens().toOIDCTokens().getIDToken(), nonce);
         } catch (BadJOSEException | JOSEException | MalformedURLException e) {
             logger.error("Failed to validate token: {}", e.getMessage(), e);
-            throw new RuntimeException(e.getMessage());
+            throw new OidcAuthenticationHandlerException(e.getMessage());
         }
     }
 
@@ -491,20 +493,36 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             response.sendRedirect(redirect.uri().toString());
             return true;
         } catch (IOException e) {
-            logger.error("Error while redirecting to default redirect: {}", e.getMessage(), e);
-            throw new RuntimeException(e);
+            throw new OidcAuthenticationHandlerException(
+                    String.format("Error while redirecting to default redirect: %s", e.getMessage()), e);
+        } catch (OAuthEntryPointException e) {
+            throw new OidcAuthenticationHandlerException(
+                    String.format("Invalid uri to redirect after login:: %s", e.getMessage()), e);
         }
     }
 
     private @NotNull RedirectTarget getAuthenticationRequestUri(
-            @NotNull ClientConnection connection, @NotNull HttpServletRequest request, @NotNull URI callbackUri) {
+            @NotNull ClientConnection connection, @NotNull HttpServletRequest request, @NotNull URI callbackUri)
+            throws OAuthEntryPointException {
 
         ResolvedConnection conn = ResolvedOidcConnection.resolve(connection);
 
         // The client ID provisioned by the OpenID provider when
         // the client was registered is stored in the connection.
 
-        String redirect = request.getRequestURI();
+        // Read if there is a parameter to the url where we need to redirect the user after authentication
+        String redirect = request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT);
+        if (redirect != null && !redirect.isEmpty()) {
+            // Validate that it is not an absolute url
+            RedirectHelper.validateRedirect(redirect);
+        } else {
+            // If the redirect is not passed as parameter,
+            // then after the authentication redirect to the requested uri
+
+            // Extract path and query from the uri
+            redirect = request.getRequestURI();
+        }
+
         String perRequestKey = new Identifier().getValue();
         Nonce nonce = new Nonce(new Identifier().getValue());
         CodeVerifier codeVerifier = null;
@@ -557,7 +575,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 response.sendRedirect(redirectUrl);
             } catch (IOException e) {
                 logger.error("Error while redirecting to redirect url '{}': {}", redirectUrl, e.getMessage(), e);
-                throw new RuntimeException(e);
+                throw new OidcAuthenticationHandlerException(e);
             }
         }
         return true;

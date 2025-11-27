@@ -19,6 +19,8 @@
 package org.apache.sling.auth.oauth_client.impl;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -84,5 +86,52 @@ class RedirectHelperTest {
         String url = "http://example.com/a/b/c_sibling/d";
         String result = RedirectHelper.findLongestPathMatching(paths, url);
         assertEquals("/a/b", result);
+    }
+
+    @Test
+    void testValidateRedirectWithValidRelativeUrl() throws OAuthEntryPointException {
+        // Should not throw exception for valid relative URLs
+        RedirectHelper.validateRedirect("/valid/path");
+        RedirectHelper.validateRedirect("/another/valid/path");
+        RedirectHelper.validateRedirect("/");
+    }
+
+    @Test
+    void testValidateRedirectWithNullUrl() throws OAuthEntryPointException {
+        // Should not throw exception for null URL
+        RedirectHelper.validateRedirect(null);
+    }
+
+    @Test
+    void testValidateRedirectWithEmptyUrl() throws OAuthEntryPointException {
+        // Should not throw exception for empty URL
+        RedirectHelper.validateRedirect("");
+    }
+
+    @Test
+    void testValidateRedirectWithInvalidAbsoluteUrl() {
+        // Should throw exception for absolute URLs (cross-site redirect)
+        OAuthEntryPointException exception = assertThrows(
+                OAuthEntryPointException.class, () -> RedirectHelper.validateRedirect("http://example.com/path"));
+
+        assertTrue(exception.getMessage().contains("Invalid redirect URL"));
+        assertTrue(exception.getCause() instanceof IllegalArgumentException);
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "//example.com/path",
+                "https://example.com/path",
+                "ftp://example.com/path",
+                "javascript:alert('xss')"
+            })
+    void testValidateRedirectWithInvalidUrl(String url) {
+        // Should throw exception for absolute URLs (cross-site redirect)
+        OAuthEntryPointException exception =
+                assertThrows(OAuthEntryPointException.class, () -> RedirectHelper.validateRedirect(url));
+
+        assertTrue(exception.getMessage().contains("Invalid redirect URL"));
+        assertTrue(exception.getCause() instanceof IllegalArgumentException);
     }
 }

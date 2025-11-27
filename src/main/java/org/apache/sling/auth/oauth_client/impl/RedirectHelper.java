@@ -144,4 +144,16 @@ class RedirectHelper {
             return descendant.startsWith(pattern);
         }
     }
+
+    public static void validateRedirect(String redirect) throws OAuthEntryPointException {
+        // Validate that it is not a cross-site redirect
+        if (redirect == null || redirect.isEmpty()) {
+            return;
+        }
+        if (!redirect.startsWith("/") || redirect.startsWith("//")) {
+            String message = "Invalid redirect URL: " + redirect;
+            // Relative redirect within the same domain is allowed
+            throw new OAuthEntryPointException(message, new IllegalArgumentException(message));
+        }
+    }
 }
