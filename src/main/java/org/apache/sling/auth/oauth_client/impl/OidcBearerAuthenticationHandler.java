@@ -112,6 +112,59 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
         }
     }
 
+    /**
+     * Gets the configured connection.
+     *
+     * @return the connection to use, or null if not found
+     */
+    private ClientConnection getConnection() {
+        return connections.get(connectionName);
+    }
+
+    /**
+     * Validates claims (client ID, scopes, audience), caches the token, and creates a ValidationResult.
+     *
+     * @param token the bearer token
+     * @param claimsSet the JWT claims set
+     * @param connection the client connection
+     * @param validationMode description for logging (e.g., "offline" or "online")
+     * @return ValidationResult if valid, null otherwise
+     */
+    private ValidationResult validateClaimsAndCreateResult(
+            @NotNull String token,
+            @NotNull JWTClaimsSet claimsSet,
+            @NotNull ClientConnection connection,
+            @NotNull String validationMode) {
+
+        String subject = claimsSet.getSubject();
+        if (subject == null || subject.isEmpty()) {
+            logger.debug("Token has no subject claim");
+            return null;
+        }
+
+        // Validate client ID
+        if (!validateClientId(claimsSet)) {
+            return null;
+        }
+
+        // Validate scopes
+        if (!validateScopes(claimsSet)) {
+            return null;
+        }
+
+        // Validate audience
+        if (!validateAudience(claimsSet)) {
+            return null;
+        }
+
+        // Cache the validated token
+        cacheToken(token, subject, claimsSet);
+
+        logger.info("Bearer token validated successfully ({}) for subject: {}", validationMode, subject);
+
+        return new ValidationResult(subject, claimsSet, connection);
+    }
+
     // Cache structure: token -> CachedToken
     private final Map<String, CachedToken> tokenCache = new ConcurrentHashMap<>();
 
@@ -134,8 +187,8 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
         @AttributeDefinition(
                 name = "Connection Name",
                 description =
-                        "Name of the OIDC connection to use for bearer token validation. If empty, will try all configured connections.")
-        String connectionName() default "";
+                        "Name of the OIDC connection to use for bearer token validation. REQUIRED: Must be configured with a valid connection name.")
+        String connectionName();
 
         @AttributeDefinition(
                 name = "Online Validation",
@@ -152,27 +205,28 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
         @AttributeDefinition(
                 name = "Accepted Client IDs",
                 description =
-                        "List of accepted OAuth2 client IDs. Only tokens issued to one of these client IDs will be accepted. REQUIRED: Must contain at least one client ID. If not configured or empty, all tokens will be rejected.",
+                        "List of accepted OAuth2 client IDs. Only tokens issued to one of these client IDs will be accepted. If not configured or empty, client ID validation is skipped.",
                 cardinality = Integer.MAX_VALUE)
         String[] acceptedClientIds() default {};
 
         @AttributeDefinition(
                 name = "Required Scopes",
                 description =
-                        "List of required OAuth2 scopes. Tokens must have ALL of these scopes to be accepted. REQUIRED: Must contain at least one scope. If not configured or empty, all tokens will be rejected.",
+                        "List of required OAuth2 scopes. Tokens must have ALL of these scopes to be accepted. If not configured or empty, scope validation is skipped.",
                 cardinality = Integer.MAX_VALUE)
         String[] requiredScopes() default {};
 
         @AttributeDefinition(
                 name = "Required Audiences",
                 description =
-                        "List of required audiences. Tokens must have at least one of these audiences to be accepted. REQUIRED: Must contain at least one audience. If not configured or empty, all tokens will be rejected.",
+                        "List of required audiences. Tokens must have at least one of these audiences to be accepted. If not configured or empty, audience validation is skipped.",
                 cardinality = Integer.MAX_VALUE)
         String[] requiredAudiences() default {};
 
         @AttributeDefinition(
                 name = "Cache TTL (seconds)",
-                description = "Time to live for cached tokens in seconds. Default is 300 (5 minutes).")
+                description =
+                        "Time to live for cached tokens in seconds. Default is 300 (5 minutes). Set to 0 to disable caching.")
         long cacheTtlSeconds() default 300;
 
         @AttributeDefinition(
@@ -205,12 +259,15 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
         this.requiredScopes = config.requiredScopes();
         this.requiredAudiences = config.requiredAudiences();
 
+        // Validate that connectionName is configured
+        if (connectionName == null || connectionName.isEmpty()) {
+            throw new IllegalArgumentException("Connection name not configured");
+        }
+
         // Validate that the specified connection exists
-        if (connectionName != null && !connectionName.isEmpty() && !this.connections.containsKey(connectionName)) {
-            logger.warn(
-                    "Configured connection '{}' not found. Available connections: {}",
-                    connectionName,
-                    this.connections.keySet());
+        if (!this.connections.containsKey(connectionName)) {
+            throw new IllegalArgumentException("Configured connection '" + connectionName
+                    + "' not found. Available connections: " + this.connections.keySet());
         }
 
         // Validate online validation configuration
@@ -223,7 +280,7 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
             logger.debug("User info fetching is enabled. Profile will be synchronized after token validation.");
         }
 
-        // Validate and log accepted client IDs
+        // Validate and log accepted client IDs (optional)
         if (acceptedClientIds != null && acceptedClientIds.length > 0) {
             // Check that all client ID entries are non-empty
             for (String clientId : acceptedClientIds) {
@@ -234,10 +291,10 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
             }
             logger.debug("Accepted client IDs: {}", String.join(", ", acceptedClientIds));
         } else {
-            throw new IllegalArgumentException("Accepted client IDs not configured");
+            logger.info("Client ID validation is disabled - no accepted client IDs configured");
         }
 
-        // Validate and log required scopes
+        // Validate and log required scopes (optional)
         if (requiredScopes != null && requiredScopes.length > 0) {
             // Check that all scope entries are non-empty
             for (String scope : requiredScopes) {
@@ -248,10 +305,10 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
             }
             logger.debug("Required scopes: {}", String.join(", ", requiredScopes));
         } else {
-            throw new IllegalArgumentException("Required scopes not configured");
+            logger.info("Scope validation is disabled - no required scopes configured");
         }
 
-        // Validate and log required audiences
+        // Validate and log required audiences (optional)
         if (requiredAudiences != null && requiredAudiences.length > 0) {
             // Check that all audience entries are non-empty
             for (String audience : requiredAudiences) {
@@ -262,7 +319,12 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
             }
             logger.debug("Required audiences: {}", String.join(", ", requiredAudiences));
         } else {
-            throw new IllegalArgumentException("Required audiences not configured");
+            logger.info("Audience validation is disabled - no required audiences configured");
+        }
+
+        // Log cache configuration
+        if (cacheTtlSeconds <= 0) {
+            logger.info("Token caching is disabled - cache TTL is 0 or negative");
         }
 
         logger.debug("activate: registering ExternalIdentityProvider");
@@ -273,7 +335,7 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
 
         logger.info(
                 "OidcBearerAuthenticationHandler successfully activated with connection: {}, validation: {}, cache TTL: {}s, max size: {}",
-                connectionName != null && !connectionName.isEmpty() ? connectionName : "all",
+                connectionName,
                 onlineValidation ? "online" : "offline",
                 cacheTtlSeconds,
                 cacheMaxSize);
@@ -298,11 +360,13 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
         }
 
         try {
-            // Check cache first
-            CachedToken cachedToken = tokenCache.get(token);
-            if (cachedToken != null && !cachedToken.isExpired()) {
-                logger.debug("Using cached token for subject: {}", cachedToken.subject);
-                return createAuthenticationInfo(cachedToken.subject, cachedToken.claimsSet, token);
+            // Check cache first (only if caching is enabled)
+            if (cacheTtlSeconds > 0) {
+                CachedToken cachedToken = tokenCache.get(token);
+                if (cachedToken != null && !cachedToken.isExpired()) {
+                    logger.debug("Using cached token for subject: {}", cachedToken.subject);
+                    return createAuthenticationInfo(cachedToken.subject, cachedToken.claimsSet, token);
+                }
             }
 
             // Choose validation method
@@ -356,81 +420,33 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
         SignedJWT signedJWT = (SignedJWT) jwt;
         JWTClaimsSet claimsSet = signedJWT.getJWTClaimsSet();
 
-        // Get the configured connection or try all if not specified
-        ResolvedOidcConnection validConnection = null;
-        ClientConnection validClientConnection = null;
-
-        if (connectionName != null && !connectionName.isEmpty()) {
-            // Use the specified connection
-            ClientConnection connection = connections.get(connectionName);
-            if (connection == null) {
-                logger.debug("Configured connection '{}' not found", connectionName);
-                return null;
-            }
-
-            try {
-                ResolvedConnection resolved = ResolvedOidcConnection.resolve(connection);
-                if (resolved instanceof ResolvedOidcConnection) {
-                    ResolvedOidcConnection resolvedConnection = (ResolvedOidcConnection) resolved;
-                    if (validateToken(signedJWT, resolvedConnection, claimsSet)) {
-                        validConnection = resolvedConnection;
-                        validClientConnection = connection;
-                    }
-                }
-            } catch (Exception e) {
-                logger.debug("Token validation failed: {}", e.getMessage());
-            }
-        } else {
-            // No specific connection configured, try all connections
-            for (ClientConnection connection : connections.values()) {
-                try {
-                    ResolvedConnection resolved = ResolvedOidcConnection.resolve(connection);
-                    if (resolved instanceof ResolvedOidcConnection) {
-                        ResolvedOidcConnection resolvedConnection = (ResolvedOidcConnection) resolved;
-                        if (validateToken(signedJWT, resolvedConnection, claimsSet)) {
-                            validConnection = resolvedConnection;
-                            validClientConnection = connection;
-                            break;
-                        }
-                    }
-                } catch (Exception e) {
-                    logger.debug("Token validation failed for connection {}: {}", connection.name(), e.getMessage());
-                }
-            }
+        // Get the configured connection
+        ClientConnection connection = getConnection();
+        if (connection == null) {
+            logger.debug("Configured connection '{}' not found", connectionName);
+            return null;
         }
 
-        if (validConnection == null) {
+        // Validate the token against the connection
+        ClientConnection validClientConnection = null;
+        try {
+            ResolvedConnection resolved = ResolvedOidcConnection.resolve(connection);
+            if (resolved instanceof ResolvedOidcConnection) {
+                ResolvedOidcConnection resolvedConnection = (ResolvedOidcConnection) resolved;
+                if (validateToken(signedJWT, resolvedConnection, claimsSet)) {
+                    validClientConnection = connection;
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Token validation failed: {}", e.getMessage());
+        }
+
+        if (validClientConnection == null) {
             logger.debug("Token validation failed");
             return null;
         }
 
-        String subject = claimsSet.getSubject();
-        if (subject == null || subject.isEmpty()) {
-            logger.debug("Token has no subject claim");
-            return null;
-        }
-
-        // Validate client ID if configured
-        if (!validateClientId(claimsSet)) {
-            return null;
-        }
-
-        // Validate scopes if configured
-        if (!validateScopes(claimsSet)) {
-            return null;
-        }
-
-        // Validate audience if configured
-        if (!validateAudience(claimsSet)) {
-            return null;
-        }
-
-        // Cache the validated token
-        cacheToken(token, subject, claimsSet);
-
-        logger.info("Bearer token validated successfully (offline) for subject: {}", subject);
-
-        return new ValidationResult(subject, claimsSet, validClientConnection);
+        return validateClaimsAndCreateResult(token, claimsSet, validClientConnection, "offline");
     }
 
     /**
@@ -442,18 +458,8 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
     private ValidationResult validateTokenOnline(@NotNull String token) {
         try {
             // Get the configured connection
-            ClientConnection connection = null;
-            if (connectionName != null && !connectionName.isEmpty()) {
-                connection = connections.get(connectionName);
-                if (connection == null) {
-                    logger.debug("Configured connection '{}' not found", connectionName);
-                    return null;
-                }
-            } else if (!connections.isEmpty()) {
-                // Use first available connection if none specified
-                connection = connections.values().iterator().next();
-            } else {
-                logger.debug("No connections available for online validation");
+            ClientConnection connection = getConnection();
+            if (connection == null) {
                 return null;
             }
 
@@ -557,27 +563,7 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
 
             JWTClaimsSet claimsSet = claimsBuilder.build();
 
-            // Validate client ID if configured
-            if (!validateClientId(claimsSet)) {
-                return null;
-            }
-
-            // Validate scopes if configured
-            if (!validateScopes(claimsSet)) {
-                return null;
-            }
-
-            // Validate audience if configured
-            if (!validateAudience(claimsSet)) {
-                return null;
-            }
-
-            // Cache the validated token
-            cacheToken(token, subject, claimsSet);
-
-            logger.info("Bearer token validated successfully (online) for subject: {}", subject);
-
-            return new ValidationResult(subject, claimsSet, connection);
+            return validateClaimsAndCreateResult(token, claimsSet, connection, "online");
 
         } catch (Exception e) {
             logger.debug("Online token validation failed: {}", e.getMessage());
@@ -593,9 +579,9 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
      */
     private boolean validateClientId(@NotNull JWTClaimsSet claimsSet) {
         if (acceptedClientIds == null || acceptedClientIds.length == 0) {
-            // No client ID validation configured - reject token
-            logger.debug("No accepted client IDs configured - rejecting token");
-            return false;
+            // No client ID validation configured - skip validation
+            logger.debug("No accepted client IDs configured - skipping client ID validation");
+            return true;
         }
 
         // Get client_id claim from the token (try both client_id and azp)
@@ -638,9 +624,9 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
      */
     private boolean validateScopes(@NotNull JWTClaimsSet claimsSet) {
         if (requiredScopes == null || requiredScopes.length == 0) {
-            // No scope validation configured - reject token
-            logger.debug("No required scopes configured - rejecting token");
-            return false;
+            // No scope validation configured - skip validation
+            logger.debug("No required scopes configured - skipping scope validation");
+            return true;
         }
 
         // Try to get scopes from the token
@@ -686,9 +672,9 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
      */
     private boolean validateAudience(@NotNull JWTClaimsSet claimsSet) {
         if (requiredAudiences == null || requiredAudiences.length == 0) {
-            // No audience validation configured - reject token
-            logger.debug("No required audiences configured - rejecting token");
-            return false;
+            // No audience validation configured - skip validation
+            logger.debug("No required audiences configured - skipping audience validation");
+            return true;
         }
 
         List<String> tokenAudiences = claimsSet.getAudience();
@@ -950,6 +936,12 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
      * @param claimsSet the JWT claims set
      */
     private void cacheToken(@NotNull String token, @NotNull String subject, @NotNull JWTClaimsSet claimsSet) {
+        // Skip caching if disabled
+        if (cacheTtlSeconds <= 0) {
+            logger.debug("Token caching is disabled - not caching token for subject: {}", subject);
+            return;
+        }
+
         // Enforce cache size limit
         if (tokenCache.size() >= cacheMaxSize) {
             // Remove oldest entries (simple LRU-like behavior)
