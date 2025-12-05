@@ -23,8 +23,6 @@ import javax.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
 import java.net.URL;
-import java.text.ParseException;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,24 +30,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import com.nimbusds.jose.JOSEException;
-import com.nimbusds.jose.JWSVerifier;
-import com.nimbusds.jose.crypto.RSASSAVerifier;
-import com.nimbusds.jose.jwk.JWKSet;
-import com.nimbusds.jose.jwk.RSAKey;
-import com.nimbusds.jwt.JWT;
 import com.nimbusds.jwt.JWTClaimsSet;
-import com.nimbusds.jwt.JWTParser;
-import com.nimbusds.jwt.SignedJWT;
-import com.nimbusds.oauth2.sdk.TokenIntrospectionRequest;
-import com.nimbusds.oauth2.sdk.TokenIntrospectionResponse;
-import com.nimbusds.oauth2.sdk.auth.ClientAuthentication;
-import com.nimbusds.oauth2.sdk.auth.ClientSecretBasic;
-import com.nimbusds.oauth2.sdk.auth.Secret;
 import com.nimbusds.oauth2.sdk.http.HTTPResponse;
-import com.nimbusds.oauth2.sdk.id.ClientID;
-import com.nimbusds.oauth2.sdk.token.AccessToken;
-import com.nimbusds.oauth2.sdk.token.BearerAccessToken;
 import org.apache.jackrabbit.oak.spi.security.authentication.credentials.CredentialsSupport;
 import org.apache.jackrabbit.oak.spi.security.authentication.external.ExternalIdentityProvider;
 import org.apache.sling.auth.core.spi.AuthenticationHandler;
@@ -57,6 +39,7 @@ import org.apache.sling.auth.core.spi.AuthenticationInfo;
 import org.apache.sling.auth.core.spi.DefaultAuthenticationFeedbackHandler;
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
+import org.apache.sling.auth.oauth_client.spi.TokenValidator;
 import org.apache.sling.auth.oauth_client.spi.UserInfoProcessor;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
 import org.jetbrains.annotations.NotNull;
@@ -85,32 +68,15 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final Map<String, ClientConnection> connections;
+    private final Map<String, TokenValidator> tokenValidators;
     private final Map<String, UserInfoProcessor> userInfoProcessors;
     private final String idp;
     private final String connectionName;
+    private final String validatorName;
     private final String[] path;
     private final long cacheTtlSeconds;
     private final int cacheMaxSize;
-    private final boolean onlineValidation;
     private final boolean fetchUserInfo;
-    private final String[] acceptedClientIds;
-    private final String[] requiredScopes;
-    private final String[] requiredAudiences;
-
-    /**
-     * Result of token validation containing the validated claims and connection.
-     */
-    private static class ValidationResult {
-        final String subject;
-        final JWTClaimsSet claimsSet;
-        final ClientConnection connection;
-
-        ValidationResult(String subject, JWTClaimsSet claimsSet, ClientConnection connection) {
-            this.subject = subject;
-            this.claimsSet = claimsSet;
-            this.connection = connection;
-        }
-    }
 
     /**
      * Gets the configured connection.
@@ -119,50 +85,6 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
      */
     private ClientConnection getConnection() {
         return connections.get(connectionName);
-    }
-
-    /**
-     * Validates claims (client ID, scopes, audience), caches the token, and creates a ValidationResult.
-     *
-     * @param token the bearer token
-     * @param claimsSet the JWT claims set
-     * @param connection the client connection
-     * @param validationMode description for logging (e.g., "offline" or "online")
-     * @return ValidationResult if valid, null otherwise
-     */
-    private ValidationResult validateClaimsAndCreateResult(
-            @NotNull String token,
-            @NotNull JWTClaimsSet claimsSet,
-            @NotNull ClientConnection connection,
-            @NotNull String validationMode) {
-
-        String subject = claimsSet.getSubject();
-        if (subject == null || subject.isEmpty()) {
-            logger.debug("Token has no subject claim");
-            return null;
-        }
-
-        // Validate client ID
-        if (!validateClientId(claimsSet)) {
-            return null;
-        }
-
-        // Validate scopes
-        if (!validateScopes(claimsSet)) {
-            return null;
-        }
-
-        // Validate audience
-        if (!validateAudience(claimsSet)) {
-            return null;
-        }
-
-        // Cache the validated token
-        cacheToken(token, subject, claimsSet);
-
-        logger.info("Bearer token validated successfully ({}) for subject: {}", validationMode, subject);
-
-        return new ValidationResult(subject, claimsSet, connection);
     }
 
     // Cache structure: token -> CachedToken
@@ -191,10 +113,10 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
         String connectionName();
 
         @AttributeDefinition(
-                name = "Online Validation",
+                name = "Token Validator Name",
                 description =
-                        "Enable online token validation using OAuth2 token introspection endpoint. When enabled, tokens are validated against the provider's introspection endpoint instead of offline JWT validation. The introspection endpoint is configured on the OIDC connection.")
-        boolean onlineValidation() default false;
+                        "Name of the token validator service to use for token validation. REQUIRED: Must be configured with a valid validator name (e.g., an OfflineTokenValidator or OnlineTokenValidator instance).")
+        String validatorName();
 
         @AttributeDefinition(
                 name = "Fetch User Info",
@@ -202,26 +124,6 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
                         "Enable fetching user information from the UserInfo endpoint after token validation. When enabled, the user profile will be synchronized with the identity provider. This requires the token to have the appropriate scope (e.g., 'profile').")
         boolean fetchUserInfo() default false;
 
-        @AttributeDefinition(
-                name = "Accepted Client IDs",
-                description =
-                        "List of accepted OAuth2 client IDs. Only tokens issued to one of these client IDs will be accepted. If not configured or empty, client ID validation is skipped.",
-                cardinality = Integer.MAX_VALUE)
-        String[] acceptedClientIds() default {};
-
-        @AttributeDefinition(
-                name = "Required Scopes",
-                description =
-                        "List of required OAuth2 scopes. Tokens must have ALL of these scopes to be accepted. If not configured or empty, scope validation is skipped.",
-                cardinality = Integer.MAX_VALUE)
-        String[] requiredScopes() default {};
-
-        @AttributeDefinition(
-                name = "Required Audiences",
-                description =
-                        "List of required audiences. Tokens must have at least one of these audiences to be accepted. If not configured or empty, audience validation is skipped.",
-                cardinality = Integer.MAX_VALUE)
-        String[] requiredAudiences() default {};
 
         @AttributeDefinition(
                 name = "Cache TTL (seconds)",
@@ -242,22 +144,22 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
     public OidcBearerAuthenticationHandler(
             @NotNull BundleContext bundleContext,
             @Reference List<ClientConnection> connections,
+            @Reference List<TokenValidator> tokenValidators,
             @Reference(policyOption = ReferencePolicyOption.GREEDY) List<UserInfoProcessor> userInfoProcessors,
             Config config) {
 
         this.connections = connections.stream().collect(Collectors.toMap(ClientConnection::name, Function.identity()));
+        this.tokenValidators =
+                tokenValidators.stream().collect(Collectors.toMap(TokenValidator::name, Function.identity()));
         this.userInfoProcessors = userInfoProcessors.stream()
                 .collect(Collectors.toMap(UserInfoProcessor::connection, Function.identity()));
         this.idp = config.idp();
         this.connectionName = config.connectionName();
+        this.validatorName = config.validatorName();
         this.path = config.path();
         this.cacheTtlSeconds = config.cacheTtlSeconds();
         this.cacheMaxSize = config.cacheMaxSize();
-        this.onlineValidation = config.onlineValidation();
         this.fetchUserInfo = config.fetchUserInfo();
-        this.acceptedClientIds = config.acceptedClientIds();
-        this.requiredScopes = config.requiredScopes();
-        this.requiredAudiences = config.requiredAudiences();
 
         // Validate that connectionName is configured
         if (connectionName == null || connectionName.isEmpty()) {
@@ -270,56 +172,20 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
                     + "' not found. Available connections: " + this.connections.keySet());
         }
 
-        // Validate online validation configuration
-        if (onlineValidation) {
-            logger.debug("Online validation is enabled. Introspection endpoint configured on OIDC connection.");
+        // Validate that validatorName is configured
+        if (validatorName == null || validatorName.isEmpty()) {
+            throw new IllegalArgumentException("Token validator name not configured");
+        }
+
+        // Validate that the specified validator exists
+        if (!this.tokenValidators.containsKey(validatorName)) {
+            throw new IllegalArgumentException("Configured token validator '" + validatorName
+                    + "' not found. Available validators: " + this.tokenValidators.keySet());
         }
 
         // Log fetchUserInfo configuration
         if (fetchUserInfo) {
             logger.debug("User info fetching is enabled. Profile will be synchronized after token validation.");
-        }
-
-        // Validate and log accepted client IDs (optional)
-        if (acceptedClientIds != null && acceptedClientIds.length > 0) {
-            // Check that all client ID entries are non-empty
-            for (String clientId : acceptedClientIds) {
-                if (clientId == null || clientId.trim().isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "Accepted client IDs configuration contains empty or null values. All client ID entries must be non-empty strings.");
-                }
-            }
-            logger.debug("Accepted client IDs: {}", String.join(", ", acceptedClientIds));
-        } else {
-            logger.info("Client ID validation is disabled - no accepted client IDs configured");
-        }
-
-        // Validate and log required scopes (optional)
-        if (requiredScopes != null && requiredScopes.length > 0) {
-            // Check that all scope entries are non-empty
-            for (String scope : requiredScopes) {
-                if (scope == null || scope.trim().isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "Required scopes configuration contains empty or null values. All scope entries must be non-empty strings.");
-                }
-            }
-            logger.debug("Required scopes: {}", String.join(", ", requiredScopes));
-        } else {
-            logger.info("Scope validation is disabled - no required scopes configured");
-        }
-
-        // Validate and log required audiences (optional)
-        if (requiredAudiences != null && requiredAudiences.length > 0) {
-            // Check that all audience entries are non-empty
-            for (String audience : requiredAudiences) {
-                if (audience == null || audience.trim().isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "Required audiences configuration contains empty or null values. All audience entries must be non-empty strings.");
-                }
-            }
-            logger.debug("Required audiences: {}", String.join(", ", requiredAudiences));
-        } else {
-            logger.info("Audience validation is disabled - no required audiences configured");
         }
 
         // Log cache configuration
@@ -334,9 +200,9 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
                 null);
 
         logger.info(
-                "OidcBearerAuthenticationHandler successfully activated with connection: {}, validation: {}, cache TTL: {}s, max size: {}",
+                "OidcBearerAuthenticationHandler successfully activated with connection: {}, validator: {}, cache TTL: {}s, max size: {}",
                 connectionName,
-                onlineValidation ? "online" : "offline",
+                validatorName,
                 cacheTtlSeconds,
                 cacheMaxSize);
     }
@@ -369,388 +235,51 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
                 }
             }
 
-            // Choose validation method
-            ValidationResult validationResult;
-            if (onlineValidation) {
-                validationResult = validateTokenOnline(token);
-            } else {
-                validationResult = validateTokenOffline(token);
-            }
-
-            if (validationResult == null) {
-                return null;
-            }
-
-            // Fetch user info if enabled
-            String userInfoJson = null;
-            if (fetchUserInfo && validationResult.connection != null) {
-                userInfoJson = fetchUserInfoJson(token, validationResult.connection);
-            }
-
-            return createAuthenticationInfoWithProcessor(
-                    validationResult.subject,
-                    validationResult.connection,
-                    userInfoJson,
-                    validationResult.claimsSet.getClaims(),
-                    token);
-
-        } catch (ParseException e) {
-            logger.debug("Failed to parse bearer token: {}", e.getMessage());
-            return null;
-        } catch (Exception e) {
-            logger.error("Error validating bearer token: {}", e.getMessage(), e);
-            return null;
-        }
-    }
-
-    /**
-     * Validates the token offline using JWT signature verification.
-     *
-     * @param token the bearer token
-     * @return ValidationResult if valid, null otherwise
-     */
-    private ValidationResult validateTokenOffline(@NotNull String token) throws ParseException {
-        // Parse and validate the token
-        JWT jwt = JWTParser.parse(token);
-        if (!(jwt instanceof SignedJWT)) {
-            logger.debug("Token is not a signed JWT");
-            return null;
-        }
-
-        SignedJWT signedJWT = (SignedJWT) jwt;
-        JWTClaimsSet claimsSet = signedJWT.getJWTClaimsSet();
-
-        // Get the configured connection
-        ClientConnection connection = getConnection();
-        if (connection == null) {
-            logger.debug("Configured connection '{}' not found", connectionName);
-            return null;
-        }
-
-        // Validate the token against the connection
-        ClientConnection validClientConnection = null;
-        try {
-            ResolvedConnection resolved = ResolvedOidcConnection.resolve(connection);
-            if (resolved instanceof ResolvedOidcConnection) {
-                ResolvedOidcConnection resolvedConnection = (ResolvedOidcConnection) resolved;
-                if (validateToken(signedJWT, resolvedConnection, claimsSet)) {
-                    validClientConnection = connection;
-                }
-            }
-        } catch (Exception e) {
-            logger.debug("Token validation failed: {}", e.getMessage());
-        }
-
-        if (validClientConnection == null) {
-            logger.debug("Token validation failed");
-            return null;
-        }
-
-        return validateClaimsAndCreateResult(token, claimsSet, validClientConnection, "offline");
-    }
-
-    /**
-     * Validates the token online using OAuth2 token introspection.
-     *
-     * @param token the bearer token
-     * @return ValidationResult if valid, null otherwise
-     */
-    private ValidationResult validateTokenOnline(@NotNull String token) {
-        try {
             // Get the configured connection
             ClientConnection connection = getConnection();
             if (connection == null) {
+                logger.debug("Configured connection '{}' not found", connectionName);
                 return null;
             }
 
-            // Get introspection endpoint from connection
-            String endpoint = null;
-            if (connection instanceof OidcConnectionImpl) {
-                OidcConnectionImpl oidcConn = (OidcConnectionImpl) connection;
-                java.net.URI introspectionUri = oidcConn.introspectionEndpoint();
-                if (introspectionUri != null) {
-                    endpoint = introspectionUri.toString();
-                    logger.debug("Using introspection endpoint: {}", endpoint);
-                }
-            }
-
-            if (endpoint == null || endpoint.isEmpty()) {
-                logger.debug(
-                        "No introspection endpoint available. Configure on OIDC connection or ensure connection uses baseUrl for auto-discovery.");
+            // Get the configured token validator
+            TokenValidator validator = tokenValidators.get(validatorName);
+            if (validator == null) {
+                logger.debug("Configured token validator '{}' not found", validatorName);
                 return null;
             }
 
-            // Get client credentials for introspection
-            ResolvedConnection resolved = ResolvedOidcConnection.resolve(connection);
-            if (!(resolved instanceof ResolvedOidcConnection)) {
-                logger.debug("Connection is not an OIDC connection");
+            // Validate the token using the configured validator (includes claims validation)
+            TokenValidator.TokenValidationResult tokenResult = validator.validate(token, connection);
+            if (tokenResult == null) {
+                logger.debug("Token validation failed");
                 return null;
             }
 
-            ResolvedOidcConnection oidcConnection = (ResolvedOidcConnection) resolved;
-            String clientId = oidcConnection.clientId();
-            String clientSecret = oidcConnection.clientSecret();
+            String subject = tokenResult.getSubject();
+            JWTClaimsSet claimsSet = tokenResult.getClaimsSet();
 
-            if (clientId == null || clientSecret == null) {
-                logger.debug("Client credentials not available for introspection");
-                return null;
+            // Cache the validated token
+            cacheToken(token, subject, claimsSet);
+
+            logger.info("Bearer token validated successfully for subject: {}", subject);
+
+            // Fetch user info if enabled
+            String userInfoJson = null;
+            if (fetchUserInfo) {
+                userInfoJson = fetchUserInfoJson(token, connection);
             }
 
-            // Perform token introspection
-            ClientAuthentication clientAuth = new ClientSecretBasic(new ClientID(clientId), new Secret(clientSecret));
-            AccessToken accessToken = new BearerAccessToken(token);
-            TokenIntrospectionRequest introspectionRequest =
-                    new TokenIntrospectionRequest(new java.net.URI(endpoint), clientAuth, accessToken);
-
-            HTTPResponse httpResponse = introspectionRequest.toHTTPRequest().send();
-            TokenIntrospectionResponse introspectionResponse = TokenIntrospectionResponse.parse(httpResponse);
-
-            if (!introspectionResponse.indicatesSuccess()) {
-                logger.debug("Token introspection failed");
-                return null;
-            }
-
-            com.nimbusds.oauth2.sdk.TokenIntrospectionSuccessResponse successResponse =
-                    introspectionResponse.toSuccessResponse();
-
-            if (!successResponse.isActive()) {
-                logger.debug("Token is not active");
-                return null;
-            }
-
-            // Extract claims from introspection response
-            String subject = successResponse.getSubject() != null
-                    ? successResponse.getSubject().getValue()
-                    : null;
-            if (subject == null || subject.isEmpty()) {
-                logger.debug("Token has no subject claim");
-                return null;
-            }
-
-            // Create a JWTClaimsSet from introspection response for consistency
-            JWTClaimsSet.Builder claimsBuilder = new JWTClaimsSet.Builder().subject(subject);
-
-            if (successResponse.getIssuer() != null) {
-                claimsBuilder.issuer(successResponse.getIssuer().getValue());
-            }
-            if (successResponse.getExpirationTime() != null) {
-                claimsBuilder.expirationTime(successResponse.getExpirationTime());
-            }
-            if (successResponse.getIssueTime() != null) {
-                claimsBuilder.issueTime(successResponse.getIssueTime());
-            }
-            if (successResponse.getAudience() != null
-                    && !successResponse.getAudience().isEmpty()) {
-                claimsBuilder.audience(successResponse.getAudience().stream()
-                        .map(aud -> aud.getValue())
-                        .collect(Collectors.toList()));
-            }
-            if (successResponse.getUsername() != null) {
-                claimsBuilder.claim("username", successResponse.getUsername());
-            }
-            if (successResponse.getScope() != null) {
-                claimsBuilder.claim("scope", successResponse.getScope().toString());
-            }
-            // Extract client_id from the JSON object
-            try {
-                net.minidev.json.JSONObject jsonObject = successResponse.toJSONObject();
-                if (jsonObject.containsKey("client_id")) {
-                    claimsBuilder.claim("client_id", jsonObject.get("client_id").toString());
-                }
-            } catch (Exception e) {
-                logger.debug("Failed to extract client_id from introspection response: {}", e.getMessage());
-            }
-
-            JWTClaimsSet claimsSet = claimsBuilder.build();
-
-            return validateClaimsAndCreateResult(token, claimsSet, connection, "online");
+            return createAuthenticationInfoWithProcessor(
+                    subject,
+                    connection,
+                    userInfoJson,
+                    claimsSet.getClaims(),
+                    token);
 
         } catch (Exception e) {
-            logger.debug("Online token validation failed: {}", e.getMessage());
+            logger.error("Error validating bearer token: {}", e.getMessage(), e);
             return null;
-        }
-    }
-
-    /**
-     * Validates that the token's client ID is in the list of accepted client IDs.
-     *
-     * @param claimsSet the JWT claims set
-     * @return true if client ID validation passes or is not configured, false otherwise
-     */
-    private boolean validateClientId(@NotNull JWTClaimsSet claimsSet) {
-        if (acceptedClientIds == null || acceptedClientIds.length == 0) {
-            // No client ID validation configured - skip validation
-            logger.debug("No accepted client IDs configured - skipping client ID validation");
-            return true;
-        }
-
-        // Get client_id claim from the token (try both client_id and azp)
-        String clientId = null;
-        try {
-            clientId = claimsSet.getStringClaim("client_id");
-            if (clientId == null || clientId.isEmpty()) {
-                // Try azp (authorized party) as fallback - commonly used in Keycloak
-                clientId = claimsSet.getStringClaim("azp");
-            }
-        } catch (ParseException e) {
-            logger.debug("Failed to parse client_id from token: {}", e.getMessage());
-        }
-
-        if (clientId == null || clientId.isEmpty()) {
-            logger.debug("Token does not contain a client_id or azp claim");
-            return false;
-        }
-
-        // Check if client_id is in the accepted list
-        for (String acceptedClientId : acceptedClientIds) {
-            if (clientId.equals(acceptedClientId)) {
-                logger.debug("Token client_id '{}' is accepted", clientId);
-                return true;
-            }
-        }
-
-        logger.debug(
-                "Token client_id '{}' is not in the list of accepted client IDs: {}",
-                clientId,
-                String.join(", ", acceptedClientIds));
-        return false;
-    }
-
-    /**
-     * Validates that the token has ALL of the required scopes.
-     *
-     * @param claimsSet the JWT claims set
-     * @return true if scope validation passes or is not configured, false otherwise
-     */
-    private boolean validateScopes(@NotNull JWTClaimsSet claimsSet) {
-        if (requiredScopes == null || requiredScopes.length == 0) {
-            // No scope validation configured - skip validation
-            logger.debug("No required scopes configured - skipping scope validation");
-            return true;
-        }
-
-        // Try to get scopes from the token
-        String scopeString = null;
-        try {
-            scopeString = claimsSet.getStringClaim("scope");
-            if (scopeString == null) {
-                scopeString = claimsSet.getStringClaim("scp");
-            }
-        } catch (ParseException e) {
-            logger.debug("Failed to parse scope from token: {}", e.getMessage());
-        }
-
-        if (scopeString == null || scopeString.isEmpty()) {
-            logger.debug("Token does not contain a scope claim");
-            return false;
-        }
-
-        // Split scopes (usually space-separated)
-        List<String> tokenScopesList = Arrays.asList(scopeString.split("\\s+"));
-
-        // Check if token has ALL required scopes
-        for (String requiredScope : requiredScopes) {
-            if (!tokenScopesList.contains(requiredScope)) {
-                logger.debug(
-                        "Token is missing required scope '{}'. Token scopes: {}, Required scopes: {}",
-                        requiredScope,
-                        scopeString,
-                        String.join(", ", requiredScopes));
-                return false;
-            }
-        }
-
-        logger.debug("Token has all required scopes: {}", String.join(", ", requiredScopes));
-        return true;
-    }
-
-    /**
-     * Validates that the token's audience matches one of the accepted audiences.
-     *
-     * @param claimsSet the JWT claims set
-     * @return true if audience validation passes or is not configured, false otherwise
-     */
-    private boolean validateAudience(@NotNull JWTClaimsSet claimsSet) {
-        if (requiredAudiences == null || requiredAudiences.length == 0) {
-            // No audience validation configured - skip validation
-            logger.debug("No required audiences configured - skipping audience validation");
-            return true;
-        }
-
-        List<String> tokenAudiences = claimsSet.getAudience();
-        if (tokenAudiences == null || tokenAudiences.isEmpty()) {
-            logger.debug("Token does not contain an audience claim");
-            return false;
-        }
-
-        // Check if token has at least one of the required audiences
-        for (String tokenAudience : tokenAudiences) {
-            for (String requiredAudience : requiredAudiences) {
-                if (tokenAudience.equals(requiredAudience)) {
-                    logger.debug("Token has required audience: {}", tokenAudience);
-                    return true;
-                }
-            }
-        }
-
-        logger.debug("Token does not have any of the required audiences: {}", Arrays.toString(requiredAudiences));
-        return false;
-    }
-
-    /**
-     * Validates the token using the OIDC connection configuration.
-     *
-     * @param signedJWT the signed JWT to validate
-     * @param connection the OIDC connection to use for validation
-     * @param claimsSet the JWT claims set
-     * @return true if the token is valid, false otherwise
-     */
-    private boolean validateToken(
-            @NotNull SignedJWT signedJWT, @NotNull ResolvedOidcConnection connection, @NotNull JWTClaimsSet claimsSet) {
-        try {
-            // Validate issuer
-            String issuerClaim = claimsSet.getIssuer();
-            if (!connection.issuer().equals(issuerClaim)) {
-                logger.debug("Issuer mismatch: expected {}, got {}", connection.issuer(), issuerClaim);
-                return false;
-            }
-
-            // Validate expiration
-            if (claimsSet.getExpirationTime() != null
-                    && claimsSet.getExpirationTime().before(new java.util.Date())) {
-                logger.debug("Token has expired");
-                return false;
-            }
-
-            // Validate signature using JWK Set
-            URL jwkSetURL = connection.jwkSetURL().toURL();
-            JWKSet jwkSet = JWKSet.load(jwkSetURL);
-
-            // Get the key ID from the JWT header
-            String keyID = signedJWT.getHeader().getKeyID();
-            if (keyID == null) {
-                logger.debug("No key ID in JWT header");
-                return false;
-            }
-
-            // Find the matching key in the JWK set
-            RSAKey rsaKey = (RSAKey) jwkSet.getKeyByKeyId(keyID);
-            if (rsaKey == null) {
-                logger.debug("No matching key found for key ID: {}", keyID);
-                return false;
-            }
-
-            // Verify the signature
-            JWSVerifier verifier = new RSASSAVerifier(rsaKey);
-            if (!signedJWT.verify(verifier)) {
-                logger.debug("Signature verification failed");
-                return false;
-            }
-
-            return true;
-        } catch (JOSEException | java.io.IOException | ParseException e) {
-            logger.debug("Token validation failed: {}", e.getMessage());
-            return false;
         }
     }
 

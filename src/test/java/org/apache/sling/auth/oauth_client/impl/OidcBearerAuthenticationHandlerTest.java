@@ -42,6 +42,7 @@ import com.sun.net.httpserver.HttpServer;
 import org.apache.sling.auth.core.spi.AuthenticationInfo;
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
+import org.apache.sling.auth.oauth_client.spi.TokenValidator;
 import org.apache.sling.auth.oauth_client.spi.UserInfoProcessor;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
 import org.apache.sling.testing.mock.osgi.junit5.OsgiContext;
@@ -67,6 +68,7 @@ class OidcBearerAuthenticationHandlerTest {
     private OsgiContext osgiContext = new OsgiContext();
     private BundleContext bundleContext;
     private List<ClientConnection> connections;
+    private List<TokenValidator> tokenValidators;
     private List<UserInfoProcessor> userInfoProcessors;
     private OidcBearerAuthenticationHandler handler;
     private OidcBearerAuthenticationHandler.Config config;
@@ -100,6 +102,10 @@ class OidcBearerAuthenticationHandlerTest {
         userInfoProcessors = new ArrayList<>();
         userInfoProcessors.add(processor);
 
+        // Create mock TokenValidator
+        tokenValidators = new ArrayList<>();
+        tokenValidators.add(createMockOfflineTokenValidator("test-validator"));
+
         // Create configuration
         config = Converters.standardConverter()
                 .convert(new java.util.HashMap<String, Object>() {
@@ -107,10 +113,7 @@ class OidcBearerAuthenticationHandlerTest {
                         put("path", new String[] {"/"});
                         put("idp", "oidc-bearer");
                         put("connectionName", "test-connection");
-                        put("onlineValidation", false);
-                        put("acceptedClientIds", new String[] {CLIENT_ID});
-                        put("requiredScopes", new String[] {"openid"});
-                        put("requiredAudiences", new String[] {"test-audience"});
+                        put("validatorName", "test-validator");
                         put("cacheTtlSeconds", 300L);
                         put("cacheMaxSize", 1000);
                         put("service.ranking", 0);
@@ -121,7 +124,141 @@ class OidcBearerAuthenticationHandlerTest {
         bundleContext = osgiContext.bundleContext();
 
         // Create handler
-        handler = new OidcBearerAuthenticationHandler(bundleContext, connections, userInfoProcessors, config);
+        handler = new OidcBearerAuthenticationHandler(
+                bundleContext, connections, tokenValidators, userInfoProcessors, config);
+    }
+
+    private TokenValidator createMockOfflineTokenValidator(String name) {
+        return createMockOfflineTokenValidator(
+                name, new String[] {CLIENT_ID}, new String[] {"openid"}, new String[] {"test-audience"});
+    }
+
+    private TokenValidator createMockOfflineTokenValidator(
+            String name, String[] acceptedClientIds, String[] requiredScopes, String[] requiredAudiences) {
+        return new TokenValidator() {
+            @Override
+            public @NotNull String name() {
+                return name;
+            }
+
+            @Override
+            public TokenValidationResult validate(@NotNull String token, @NotNull ClientConnection connection) {
+                try {
+                    SignedJWT signedJWT = SignedJWT.parse(token);
+                    JWTClaimsSet claimsSet = signedJWT.getJWTClaimsSet();
+
+                    // Validate issuer
+                    if (!ISSUER.equals(claimsSet.getIssuer())) {
+                        return null;
+                    }
+
+                    // Validate expiration
+                    if (claimsSet.getExpirationTime() != null
+                            && claimsSet.getExpirationTime().before(new Date())) {
+                        return null;
+                    }
+
+                    // Verify signature
+                    if (!signedJWT.verify(new com.nimbusds.jose.crypto.RSASSAVerifier(rsaKey.toPublicJWK()))) {
+                        return null;
+                    }
+
+                    String subject = claimsSet.getSubject();
+                    if (subject == null || subject.isEmpty()) {
+                        return null;
+                    }
+
+                    // Validate client ID (if configured)
+                    if (acceptedClientIds != null && acceptedClientIds.length > 0) {
+                        String clientId = claimsSet.getStringClaim("client_id");
+                        if (clientId == null || clientId.isEmpty()) {
+                            clientId = claimsSet.getStringClaim("azp");
+                        }
+                        if (clientId == null || clientId.isEmpty()) {
+                            return null;
+                        }
+                        boolean clientIdValid = false;
+                        for (String acceptedClientId : acceptedClientIds) {
+                            if (clientId.equals(acceptedClientId)) {
+                                clientIdValid = true;
+                                break;
+                            }
+                        }
+                        if (!clientIdValid) {
+                            return null;
+                        }
+                    }
+
+                    // Validate scopes (if configured)
+                    if (requiredScopes != null && requiredScopes.length > 0) {
+                        String scopeString = claimsSet.getStringClaim("scope");
+                        if (scopeString == null || scopeString.isEmpty()) {
+                            return null;
+                        }
+                        java.util.List<String> tokenScopes = java.util.Arrays.asList(scopeString.split("\\s+"));
+                        for (String requiredScope : requiredScopes) {
+                            if (!tokenScopes.contains(requiredScope)) {
+                                return null;
+                            }
+                        }
+                    }
+
+                    // Validate audience (if configured)
+                    if (requiredAudiences != null && requiredAudiences.length > 0) {
+                        java.util.List<String> tokenAudiences = claimsSet.getAudience();
+                        if (tokenAudiences == null || tokenAudiences.isEmpty()) {
+                            return null;
+                        }
+                        boolean audienceValid = false;
+                        for (String tokenAudience : tokenAudiences) {
+                            for (String requiredAudience : requiredAudiences) {
+                                if (tokenAudience.equals(requiredAudience)) {
+                                    audienceValid = true;
+                                    break;
+                                }
+                            }
+                            if (audienceValid) break;
+                        }
+                        if (!audienceValid) {
+                            return null;
+                        }
+                    }
+
+                    return new TokenValidationResult(subject, claimsSet);
+                } catch (Exception e) {
+                    return null;
+                }
+            }
+        };
+    }
+
+    private TokenValidator createMockOnlineTokenValidator(
+            String name, int introspectionPort, boolean active, String subject) {
+        return new TokenValidator() {
+            @Override
+            public @NotNull String name() {
+                return name;
+            }
+
+            @Override
+            public TokenValidationResult validate(@NotNull String token, @NotNull ClientConnection connection) {
+                if (!active) {
+                    return null;
+                }
+
+                // Build claims set for active token
+                JWTClaimsSet.Builder claimsBuilder = new JWTClaimsSet.Builder()
+                        .subject(subject)
+                        .issuer(ISSUER)
+                        .expirationTime(new Date(System.currentTimeMillis() + 3600000))
+                        .issueTime(new Date())
+                        .audience("test-audience")
+                        .claim("client_id", CLIENT_ID)
+                        .claim("scope", "openid");
+
+                return new TokenValidationResult(subject, claimsBuilder.build());
+            }
+        };
     }
 
     private UserInfoProcessor createMockUserInfoProcessor(String connectionName) {
@@ -312,10 +449,7 @@ class OidcBearerAuthenticationHandlerTest {
                         put("path", new String[] {"/"});
                         put("idp", "oidc-bearer");
                         put("connectionName", "test-connection");
-                        put("onlineValidation", false);
-                        put("acceptedClientIds", new String[] {CLIENT_ID});
-                        put("requiredScopes", new String[] {"openid"});
-                        put("requiredAudiences", new String[] {"test-audience"});
+                        put("validatorName", "test-validator");
                         put("cacheTtlSeconds", 1L); // 1 second TTL
                         put("cacheMaxSize", 1000);
                         put("service.ranking", 0);
@@ -323,8 +457,8 @@ class OidcBearerAuthenticationHandlerTest {
                 })
                 .to(OidcBearerAuthenticationHandler.Config.class);
 
-        OidcBearerAuthenticationHandler shortTtlHandler =
-                new OidcBearerAuthenticationHandler(bundleContext, connections, userInfoProcessors, shortTtlConfig);
+        OidcBearerAuthenticationHandler shortTtlHandler = new OidcBearerAuthenticationHandler(
+                bundleContext, connections, tokenValidators, userInfoProcessors, shortTtlConfig);
 
         String token = createValidToken();
         when(request.getHeader("Authorization")).thenReturn("Bearer " + token);
@@ -350,10 +484,7 @@ class OidcBearerAuthenticationHandlerTest {
                         put("path", new String[] {"/"});
                         put("idp", "oidc-bearer");
                         put("connectionName", "test-connection");
-                        put("onlineValidation", false);
-                        put("acceptedClientIds", new String[] {CLIENT_ID});
-                        put("requiredScopes", new String[] {"openid"});
-                        put("requiredAudiences", new String[] {"test-audience"});
+                        put("validatorName", "test-validator");
                         put("cacheTtlSeconds", 300L);
                         put("cacheMaxSize", 2);
                         put("service.ranking", 0);
@@ -361,8 +492,8 @@ class OidcBearerAuthenticationHandlerTest {
                 })
                 .to(OidcBearerAuthenticationHandler.Config.class);
 
-        OidcBearerAuthenticationHandler smallCacheHandler =
-                new OidcBearerAuthenticationHandler(bundleContext, connections, userInfoProcessors, smallCacheConfig);
+        OidcBearerAuthenticationHandler smallCacheHandler = new OidcBearerAuthenticationHandler(
+                bundleContext, connections, tokenValidators, userInfoProcessors, smallCacheConfig);
 
         // Add 3 tokens - cache should evict oldest
         for (int i = 1; i <= 3; i++) {
@@ -467,10 +598,7 @@ class OidcBearerAuthenticationHandlerTest {
                             put("path", new String[] {"/"});
                             put("idp", "oidc-bearer");
                             put("connectionName", "test-connection-introspection");
-                            put("onlineValidation", true);
-                            put("acceptedClientIds", new String[] {CLIENT_ID});
-                            put("requiredScopes", new String[] {"openid"});
-                            put("requiredAudiences", new String[] {"test-audience"});
+                            put("validatorName", "test-online-validator");
                             put("cacheTtlSeconds", 300L);
                             put("cacheMaxSize", 1000);
                             put("service.ranking", 0);
@@ -486,8 +614,17 @@ class OidcBearerAuthenticationHandlerTest {
             List<UserInfoProcessor> processorsWithIntrospection = new ArrayList<>(userInfoProcessors);
             processorsWithIntrospection.add(introspectionProcessor);
 
+            // Create online validator for this test
+            List<TokenValidator> validatorsWithOnline = new ArrayList<>(tokenValidators);
+            validatorsWithOnline.add(createMockOnlineTokenValidator(
+                    "test-online-validator", introspectionServer.getAddress().getPort(), true, SUBJECT));
+
             OidcBearerAuthenticationHandler onlineHandler = new OidcBearerAuthenticationHandler(
-                    bundleContext, connectionsWithIntrospection, processorsWithIntrospection, onlineConfig);
+                    bundleContext,
+                    connectionsWithIntrospection,
+                    validatorsWithOnline,
+                    processorsWithIntrospection,
+                    onlineConfig);
 
             // Use any token - online validation doesn't parse JWT
             String token = "opaque-token-12345";
@@ -554,10 +691,7 @@ class OidcBearerAuthenticationHandlerTest {
                             put("path", new String[] {"/"});
                             put("idp", "oidc-bearer");
                             put("connectionName", "test-connection-introspection");
-                            put("onlineValidation", true);
-                            put("acceptedClientIds", new String[] {CLIENT_ID});
-                            put("requiredScopes", new String[] {"openid"});
-                            put("requiredAudiences", new String[] {"test-audience"});
+                            put("validatorName", "test-online-validator");
                             put("cacheTtlSeconds", 300L);
                             put("cacheMaxSize", 1000);
                             put("service.ranking", 0);
@@ -573,8 +707,17 @@ class OidcBearerAuthenticationHandlerTest {
             List<UserInfoProcessor> processorsWithIntrospection = new ArrayList<>(userInfoProcessors);
             processorsWithIntrospection.add(introspectionProcessor);
 
+            // Create online validator that returns null (inactive token)
+            List<TokenValidator> validatorsWithOnline = new ArrayList<>(tokenValidators);
+            validatorsWithOnline.add(createMockOnlineTokenValidator(
+                    "test-online-validator", introspectionServer.getAddress().getPort(), false, null));
+
             OidcBearerAuthenticationHandler onlineHandler = new OidcBearerAuthenticationHandler(
-                    bundleContext, connectionsWithIntrospection, processorsWithIntrospection, onlineConfig);
+                    bundleContext,
+                    connectionsWithIntrospection,
+                    validatorsWithOnline,
+                    processorsWithIntrospection,
+                    onlineConfig);
 
             String token = "inactive-token";
             when(request.getHeader("Authorization")).thenReturn("Bearer " + token);
@@ -647,11 +790,8 @@ class OidcBearerAuthenticationHandlerTest {
                             put("path", new String[] {"/"});
                             put("idp", "oidc-bearer");
                             put("connectionName", "test-connection-userinfo");
-                            put("onlineValidation", false);
+                            put("validatorName", "test-validator");
                             put("fetchUserInfo", true);
-                            put("acceptedClientIds", new String[] {CLIENT_ID});
-                            put("requiredScopes", new String[] {"openid"});
-                            put("requiredAudiences", new String[] {"test-audience"});
                             put("cacheTtlSeconds", 300L);
                             put("cacheMaxSize", 1000);
                             put("service.ranking", 0);
@@ -668,7 +808,7 @@ class OidcBearerAuthenticationHandlerTest {
             processorsWithUserInfo.add(userInfoConnProcessor);
 
             OidcBearerAuthenticationHandler handlerWithUserInfo = new OidcBearerAuthenticationHandler(
-                    bundleContext, connectionsWithUserInfo, processorsWithUserInfo, userInfoConfig);
+                    bundleContext, connectionsWithUserInfo, tokenValidators, processorsWithUserInfo, userInfoConfig);
 
             String token = createValidToken();
             when(request.getHeader("Authorization")).thenReturn("Bearer " + token);
@@ -702,11 +842,8 @@ class OidcBearerAuthenticationHandlerTest {
                         put("path", new String[] {"/"});
                         put("idp", "oidc-bearer");
                         put("connectionName", "test-connection");
-                        put("onlineValidation", false);
+                        put("validatorName", "test-validator");
                         put("fetchUserInfo", false); // Disabled for this test
-                        put("acceptedClientIds", new String[] {CLIENT_ID});
-                        put("requiredScopes", new String[] {"openid"});
-                        put("requiredAudiences", new String[] {"test-audience"});
                         put("cacheTtlSeconds", 300L);
                         put("cacheMaxSize", 1000);
                         put("service.ranking", 0);
@@ -714,8 +851,8 @@ class OidcBearerAuthenticationHandlerTest {
                 })
                 .to(OidcBearerAuthenticationHandler.Config.class);
 
-        OidcBearerAuthenticationHandler handler =
-                new OidcBearerAuthenticationHandler(bundleContext, connections, userInfoProcessors, userInfoConfig);
+        OidcBearerAuthenticationHandler handler = new OidcBearerAuthenticationHandler(
+                bundleContext, connections, tokenValidators, userInfoProcessors, userInfoConfig);
 
         String token = createValidToken();
         when(request.getHeader("Authorization")).thenReturn("Bearer " + token);
@@ -763,17 +900,24 @@ class OidcBearerAuthenticationHandlerTest {
 
     @Test
     void testExtractCredentials_ValidClientId() throws Exception {
-        // Create handler with accepted client IDs
+        // Create validator with accepted client IDs
+        TokenValidator clientIdValidator = createMockOfflineTokenValidator(
+                "test-clientid-validator",
+                new String[] {CLIENT_ID, "another-client-id"},
+                new String[] {"openid"},
+                new String[] {"test-audience"});
+
+        List<TokenValidator> validatorsWithClientId = new ArrayList<>(tokenValidators);
+        validatorsWithClientId.add(clientIdValidator);
+
+        // Create handler with the validator that checks client IDs
         OidcBearerAuthenticationHandler.Config clientIdConfig = Converters.standardConverter()
                 .convert(new java.util.HashMap<String, Object>() {
                     {
                         put("path", new String[] {"/"});
                         put("idp", "oidc-bearer");
                         put("connectionName", "test-connection");
-                        put("onlineValidation", false);
-                        put("acceptedClientIds", new String[] {CLIENT_ID, "another-client-id"});
-                        put("requiredScopes", new String[] {"openid"});
-                        put("requiredAudiences", new String[] {"test-audience"});
+                        put("validatorName", "test-clientid-validator");
                         put("cacheTtlSeconds", 300L);
                         put("cacheMaxSize", 1000);
                         put("service.ranking", 0);
@@ -781,8 +925,8 @@ class OidcBearerAuthenticationHandlerTest {
                 })
                 .to(OidcBearerAuthenticationHandler.Config.class);
 
-        OidcBearerAuthenticationHandler clientIdHandler =
-                new OidcBearerAuthenticationHandler(bundleContext, connections, userInfoProcessors, clientIdConfig);
+        OidcBearerAuthenticationHandler clientIdHandler = new OidcBearerAuthenticationHandler(
+                bundleContext, connections, validatorsWithClientId, userInfoProcessors, clientIdConfig);
 
         // Create token with client_id claim
         JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
@@ -815,17 +959,23 @@ class OidcBearerAuthenticationHandlerTest {
 
     @Test
     void testExtractCredentials_InvalidClientId() throws Exception {
-        // Create handler with accepted client IDs that don't match the token
+        // Create validator with accepted client IDs that don't match the token
+        TokenValidator invalidClientIdValidator = createMockOfflineTokenValidator(
+                "test-invalid-clientid-validator",
+                new String[] {"different-client-id", "another-client-id"},
+                null, // No scope validation
+                null); // No audience validation
+
+        List<TokenValidator> validatorsWithInvalidClientId = new ArrayList<>(tokenValidators);
+        validatorsWithInvalidClientId.add(invalidClientIdValidator);
+
         OidcBearerAuthenticationHandler.Config clientIdConfig = Converters.standardConverter()
                 .convert(new java.util.HashMap<String, Object>() {
                     {
                         put("path", new String[] {"/"});
                         put("idp", "oidc-bearer");
                         put("connectionName", "test-connection");
-                        put("onlineValidation", false);
-                        put("acceptedClientIds", new String[] {"different-client-id", "another-client-id"});
-                        put("requiredScopes", new String[] {"openid"});
-                        put("requiredAudiences", new String[] {"test-audience"});
+                        put("validatorName", "test-invalid-clientid-validator");
                         put("cacheTtlSeconds", 300L);
                         put("cacheMaxSize", 1000);
                         put("service.ranking", 0);
@@ -833,8 +983,8 @@ class OidcBearerAuthenticationHandlerTest {
                 })
                 .to(OidcBearerAuthenticationHandler.Config.class);
 
-        OidcBearerAuthenticationHandler clientIdHandler =
-                new OidcBearerAuthenticationHandler(bundleContext, connections, userInfoProcessors, clientIdConfig);
+        OidcBearerAuthenticationHandler clientIdHandler = new OidcBearerAuthenticationHandler(
+                bundleContext, connections, validatorsWithInvalidClientId, userInfoProcessors, clientIdConfig);
 
         // Create token with client_id claim that doesn't match accepted client IDs
         JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
@@ -865,17 +1015,22 @@ class OidcBearerAuthenticationHandlerTest {
 
     @Test
     void testExtractCredentials_ValidScope() throws Exception {
-        // Create handler with required scopes
+        // Create validator with required scopes
+        TokenValidator scopeValidator = createMockOfflineTokenValidator(
+                "test-scope-validator", new String[] {CLIENT_ID}, new String[] {"read", "write"}, new String[] {
+                    "test-audience"
+                });
+
+        List<TokenValidator> validatorsWithScope = new ArrayList<>(tokenValidators);
+        validatorsWithScope.add(scopeValidator);
+
         OidcBearerAuthenticationHandler.Config scopeConfig = Converters.standardConverter()
                 .convert(new java.util.HashMap<String, Object>() {
                     {
                         put("path", new String[] {"/"});
                         put("idp", "oidc-bearer");
                         put("connectionName", "test-connection");
-                        put("onlineValidation", false);
-                        put("acceptedClientIds", new String[] {CLIENT_ID});
-                        put("requiredScopes", new String[] {"read", "write"});
-                        put("requiredAudiences", new String[] {"test-audience"});
+                        put("validatorName", "test-scope-validator");
                         put("cacheTtlSeconds", 300L);
                         put("cacheMaxSize", 1000);
                         put("service.ranking", 0);
@@ -883,8 +1038,8 @@ class OidcBearerAuthenticationHandlerTest {
                 })
                 .to(OidcBearerAuthenticationHandler.Config.class);
 
-        OidcBearerAuthenticationHandler scopeHandler =
-                new OidcBearerAuthenticationHandler(bundleContext, connections, userInfoProcessors, scopeConfig);
+        OidcBearerAuthenticationHandler scopeHandler = new OidcBearerAuthenticationHandler(
+                bundleContext, connections, validatorsWithScope, userInfoProcessors, scopeConfig);
 
         // Create token with scopes
         String token = createTokenWithScopes("read write admin");
@@ -898,17 +1053,23 @@ class OidcBearerAuthenticationHandlerTest {
 
     @Test
     void testExtractCredentials_InvalidScope() throws Exception {
-        // Create handler with required scopes
+        // Create validator with required scopes that won't match
+        TokenValidator invalidScopeValidator = createMockOfflineTokenValidator(
+                "test-invalid-scope-validator",
+                new String[] {CLIENT_ID},
+                new String[] {"admin", "superuser"},
+                new String[] {"test-audience"});
+
+        List<TokenValidator> validatorsWithInvalidScope = new ArrayList<>(tokenValidators);
+        validatorsWithInvalidScope.add(invalidScopeValidator);
+
         OidcBearerAuthenticationHandler.Config scopeConfig = Converters.standardConverter()
                 .convert(new java.util.HashMap<String, Object>() {
                     {
                         put("path", new String[] {"/"});
                         put("idp", "oidc-bearer");
                         put("connectionName", "test-connection");
-                        put("onlineValidation", false);
-                        put("acceptedClientIds", new String[] {CLIENT_ID});
-                        put("requiredScopes", new String[] {"admin", "superuser"});
-                        put("requiredAudiences", new String[] {"test-audience"});
+                        put("validatorName", "test-invalid-scope-validator");
                         put("cacheTtlSeconds", 300L);
                         put("cacheMaxSize", 1000);
                         put("service.ranking", 0);
@@ -916,8 +1077,8 @@ class OidcBearerAuthenticationHandlerTest {
                 })
                 .to(OidcBearerAuthenticationHandler.Config.class);
 
-        OidcBearerAuthenticationHandler scopeHandler =
-                new OidcBearerAuthenticationHandler(bundleContext, connections, userInfoProcessors, scopeConfig);
+        OidcBearerAuthenticationHandler scopeHandler = new OidcBearerAuthenticationHandler(
+                bundleContext, connections, validatorsWithInvalidScope, userInfoProcessors, scopeConfig);
 
         // Create token with different scopes
         String token = createTokenWithScopes("read write");
@@ -930,17 +1091,23 @@ class OidcBearerAuthenticationHandlerTest {
 
     @Test
     void testExtractCredentials_PartialScopes() throws Exception {
-        // Create handler that requires multiple scopes
+        // Create validator that requires multiple scopes
+        TokenValidator partialScopeValidator = createMockOfflineTokenValidator(
+                "test-partial-scope-validator",
+                new String[] {CLIENT_ID},
+                new String[] {"read", "write", "admin"},
+                new String[] {"test-audience"});
+
+        List<TokenValidator> validatorsWithPartialScope = new ArrayList<>(tokenValidators);
+        validatorsWithPartialScope.add(partialScopeValidator);
+
         OidcBearerAuthenticationHandler.Config scopeConfig = Converters.standardConverter()
                 .convert(new java.util.HashMap<String, Object>() {
                     {
                         put("path", new String[] {"/"});
                         put("idp", "oidc-bearer");
                         put("connectionName", "test-connection");
-                        put("onlineValidation", false);
-                        put("acceptedClientIds", new String[] {CLIENT_ID});
-                        put("requiredScopes", new String[] {"read", "write", "admin"});
-                        put("requiredAudiences", new String[] {"test-audience"});
+                        put("validatorName", "test-partial-scope-validator");
                         put("cacheTtlSeconds", 300L);
                         put("cacheMaxSize", 1000);
                         put("service.ranking", 0);
@@ -948,8 +1115,8 @@ class OidcBearerAuthenticationHandlerTest {
                 })
                 .to(OidcBearerAuthenticationHandler.Config.class);
 
-        OidcBearerAuthenticationHandler scopeHandler =
-                new OidcBearerAuthenticationHandler(bundleContext, connections, userInfoProcessors, scopeConfig);
+        OidcBearerAuthenticationHandler scopeHandler = new OidcBearerAuthenticationHandler(
+                bundleContext, connections, validatorsWithPartialScope, userInfoProcessors, scopeConfig);
 
         // Create token with only some of the required scopes (missing "admin")
         String token = createTokenWithScopes("read write");
@@ -958,31 +1125,6 @@ class OidcBearerAuthenticationHandlerTest {
         AuthenticationInfo authInfo = scopeHandler.extractCredentials(request, response);
 
         assertNull(authInfo, "Should reject token that has only some but not all required scopes");
-    }
-
-    @Test
-    void testConfiguration_EmptyScopeValue() {
-        // Create handler configuration with an empty scope value
-        OidcBearerAuthenticationHandler.Config scopeConfig = Converters.standardConverter()
-                .convert(new java.util.HashMap<String, Object>() {
-                    {
-                        put("path", new String[] {"/"});
-                        put("idp", "oidc-bearer");
-                        put("connectionName", "test-connection");
-                        put("onlineValidation", false);
-                        put("requiredScopes", new String[] {"read", "", "write"});
-                        put("cacheTtlSeconds", 300L);
-                        put("cacheMaxSize", 1000);
-                        put("service.ranking", 0);
-                    }
-                })
-                .to(OidcBearerAuthenticationHandler.Config.class);
-
-        // Should throw IllegalArgumentException when trying to create handler with empty scope value
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> new OidcBearerAuthenticationHandler(bundleContext, connections, userInfoProcessors, scopeConfig),
-                "Should reject configuration with empty scope values");
     }
 
     // Helper methods
@@ -1062,18 +1204,23 @@ class OidcBearerAuthenticationHandlerTest {
 
     @Test
     void testExtractCredentials_ValidAudience() throws Exception {
-        // Configure handler with required audiences
+        // Create validator with required audiences
+        TokenValidator audienceValidator = createMockOfflineTokenValidator(
+                "test-audience-validator", new String[] {CLIENT_ID}, new String[] {"openid"}, new String[] {
+                    "test-audience", "api://other"
+                });
+
+        List<TokenValidator> validatorsWithAudience = new ArrayList<>(tokenValidators);
+        validatorsWithAudience.add(audienceValidator);
+
         OidcBearerAuthenticationHandler.Config audienceConfig = Converters.standardConverter()
                 .convert(new java.util.HashMap<String, Object>() {
                     {
                         put("path", new String[] {"/"});
                         put("idp", "oidc-bearer");
                         put("connectionName", "test-connection");
-                        put("onlineValidation", false);
+                        put("validatorName", "test-audience-validator");
                         put("fetchUserInfo", false);
-                        put("acceptedClientIds", new String[] {CLIENT_ID});
-                        put("requiredScopes", new String[] {"openid"});
-                        put("requiredAudiences", new String[] {"test-audience", "api://other"}); // Required audiences
                         put("cacheTtlSeconds", 300L);
                         put("cacheMaxSize", 1000);
                         put("service.ranking", 0);
@@ -1081,8 +1228,8 @@ class OidcBearerAuthenticationHandlerTest {
                 })
                 .to(OidcBearerAuthenticationHandler.Config.class);
 
-        OidcBearerAuthenticationHandler audienceHandler =
-                new OidcBearerAuthenticationHandler(bundleContext, connections, userInfoProcessors, audienceConfig);
+        OidcBearerAuthenticationHandler audienceHandler = new OidcBearerAuthenticationHandler(
+                bundleContext, connections, validatorsWithAudience, userInfoProcessors, audienceConfig);
 
         String token = createValidToken(); // Token with test-audience
         when(request.getHeader("Authorization")).thenReturn("Bearer " + token);
@@ -1095,18 +1242,23 @@ class OidcBearerAuthenticationHandlerTest {
 
     @Test
     void testExtractCredentials_InvalidAudience() throws Exception {
-        // Configure handler with required audiences
+        // Create validator with required audiences that won't match
+        TokenValidator invalidAudienceValidator = createMockOfflineTokenValidator(
+                "test-invalid-audience-validator", new String[] {CLIENT_ID}, new String[] {"openid"}, new String[] {
+                    "api://different"
+                });
+
+        List<TokenValidator> validatorsWithInvalidAudience = new ArrayList<>(tokenValidators);
+        validatorsWithInvalidAudience.add(invalidAudienceValidator);
+
         OidcBearerAuthenticationHandler.Config audienceConfig = Converters.standardConverter()
                 .convert(new java.util.HashMap<String, Object>() {
                     {
                         put("path", new String[] {"/"});
                         put("idp", "oidc-bearer");
                         put("connectionName", "test-connection");
-                        put("onlineValidation", false);
+                        put("validatorName", "test-invalid-audience-validator");
                         put("fetchUserInfo", false);
-                        put("acceptedClientIds", new String[] {CLIENT_ID});
-                        put("requiredScopes", new String[] {"openid"});
-                        put("requiredAudiences", new String[] {"api://different"}); // Required audiences
                         put("cacheTtlSeconds", 300L);
                         put("cacheMaxSize", 1000);
                         put("service.ranking", 0);
@@ -1114,8 +1266,8 @@ class OidcBearerAuthenticationHandlerTest {
                 })
                 .to(OidcBearerAuthenticationHandler.Config.class);
 
-        OidcBearerAuthenticationHandler audienceHandler =
-                new OidcBearerAuthenticationHandler(bundleContext, connections, userInfoProcessors, audienceConfig);
+        OidcBearerAuthenticationHandler audienceHandler = new OidcBearerAuthenticationHandler(
+                bundleContext, connections, validatorsWithInvalidAudience, userInfoProcessors, audienceConfig);
 
         String token = createValidToken(); // Token with test-audience
         when(request.getHeader("Authorization")).thenReturn("Bearer " + token);

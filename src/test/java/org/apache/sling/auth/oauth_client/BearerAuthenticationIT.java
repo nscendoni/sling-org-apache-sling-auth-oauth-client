@@ -42,7 +42,9 @@ import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.message.BasicNameValuePair;
 import org.apache.sling.auth.oauth_client.impl.JcrUserHomeOAuthTokenStore;
+import org.apache.sling.auth.oauth_client.impl.OfflineTokenValidator;
 import org.apache.sling.auth.oauth_client.impl.OidcConnectionImpl;
+import org.apache.sling.auth.oauth_client.impl.OnlineTokenValidator;
 import org.apache.sling.auth.oauth_client.impl.SlingUserInfoProcessorImpl;
 import org.apache.sling.auth.oauth_client.itbundle.SupportBundle;
 import org.apache.sling.commons.crypto.internal.EnvironmentVariablePasswordProvider;
@@ -68,6 +70,8 @@ class BearerAuthenticationIT {
     private static final String CRYPTO_SERVICE_PID = JasyptStandardPbeStringCryptoService.class.getName();
 
     private static final String OIDC_CONNECTION_PID = OidcConnectionImpl.class.getName();
+    private static final String OFFLINE_TOKEN_VALIDATOR_PID = OfflineTokenValidator.class.getName();
+    private static final String ONLINE_TOKEN_VALIDATOR_PID = OnlineTokenValidator.class.getName();
     private static final int MAX_RETRY = 10;
     private static SupportBundle supportBundle;
 
@@ -323,6 +327,36 @@ class BearerAuthenticationIT {
                                 "storeRefreshToken", "true",
                                 "connection", oidcConnectionName)));
 
+        // Configure Offline Token Validator with claims validation
+        configPidsToCleanup.add(sling.adaptTo(OsgiConsoleClient.class)
+                .editConfiguration(
+                        OFFLINE_TOKEN_VALIDATOR_PID + ".keycloak",
+                        OFFLINE_TOKEN_VALIDATOR_PID,
+                        Map.of(
+                                "name",
+                                "offline-validator",
+                                "acceptedClientIds",
+                                new String[] {"oidc-test", "account"},
+                                "requiredScopes",
+                                new String[] {"openid"},
+                                "requiredAudiences",
+                                new String[] {"oidc-test", "account", "account-console"})));
+
+        // Configure Online Token Validator with claims validation
+        configPidsToCleanup.add(sling.adaptTo(OsgiConsoleClient.class)
+                .editConfiguration(
+                        ONLINE_TOKEN_VALIDATOR_PID + ".keycloak",
+                        ONLINE_TOKEN_VALIDATOR_PID,
+                        Map.of(
+                                "name",
+                                "online-validator",
+                                "acceptedClientIds",
+                                new String[] {"oidc-test", "account"},
+                                "requiredScopes",
+                                new String[] {"openid"},
+                                "requiredAudiences",
+                                new String[] {"oidc-test", "account", "account-console"})));
+
         return oidcConnectionName;
     }
 
@@ -330,11 +364,13 @@ class BearerAuthenticationIT {
      * Configures the Bearer Authentication Handler with specified options.
      *
      * @param oidcConnectionName the OIDC connection name
-     * @param onlineValidation whether to use online validation (introspection)
+     * @param useOnlineValidation whether to use online validation (introspection)
      * @param fetchUserInfo whether to fetch user info from the UserInfo endpoint
      */
-    private void configureBearerAuthHandler(String oidcConnectionName, boolean onlineValidation, boolean fetchUserInfo)
-            throws Exception {
+    private void configureBearerAuthHandler(
+            String oidcConnectionName, boolean useOnlineValidation, boolean fetchUserInfo) throws Exception {
+        String validatorName = useOnlineValidation ? "online-validator" : "offline-validator";
+
         configPidsToCleanup.add(sling.adaptTo(OsgiConsoleClient.class)
                 .editConfiguration(
                         BEARER_AUTHENTICATION_HANDLER_PID + ".keycloak",
@@ -344,16 +380,10 @@ class BearerAuthenticationIT {
                                 TEST_PATH,
                                 "connectionName",
                                 oidcConnectionName,
-                                "onlineValidation",
-                                Boolean.toString(onlineValidation),
+                                "validatorName",
+                                validatorName,
                                 "fetchUserInfo",
                                 Boolean.toString(fetchUserInfo),
-                                "acceptedClientIds",
-                                new String[] {"oidc-test", "account"},
-                                "requiredScopes",
-                                new String[] {"openid"},
-                                "requiredAudiences",
-                                new String[] {"oidc-test", "account", "account-console"},
                                 "idp",
                                 "oidc-idp")));
 
