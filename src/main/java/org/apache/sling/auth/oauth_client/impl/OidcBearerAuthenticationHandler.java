@@ -124,7 +124,6 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
                         "Enable fetching user information from the UserInfo endpoint after token validation. When enabled, the user profile will be synchronized with the identity provider. This requires the token to have the appropriate scope (e.g., 'profile').")
         boolean fetchUserInfo() default false;
 
-
         @AttributeDefinition(
                 name = "Cache TTL (seconds)",
                 description =
@@ -271,11 +270,7 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
             }
 
             return createAuthenticationInfoWithProcessor(
-                    subject,
-                    connection,
-                    userInfoJson,
-                    claimsSet.getClaims(),
-                    token);
+                    subject, connection, userInfoJson, claimsSet.getClaims(), token);
 
         } catch (Exception e) {
             logger.error("Error validating bearer token: {}", e.getMessage(), e);
@@ -444,7 +439,7 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
 
         // Create credentials with claims
         OidcAuthCredentials credentials = new OidcAuthCredentials(subject, idp);
-        credentials.setAttribute(".token", token);
+        credentials.setAttribute(".token", "");
 
         // Add all claims as attributes (converting Object values to String)
         for (Map.Entry<String, Object> entry : claimsSet.getClaims().entrySet()) {

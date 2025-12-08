@@ -134,7 +134,11 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
             });
         }
 
-        if (groupsInIdToken) {
+        if (groupsInIdToken && tokenResponse
+                .toSuccessResponse()
+                .getTokens()
+                .toOIDCTokens()
+                .getIDToken() != null) {
             // If groups are in ID Token, add them to the credentials
             try {
                 Object groups = tokenResponse

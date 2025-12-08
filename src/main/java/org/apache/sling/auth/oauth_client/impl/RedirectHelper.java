@@ -56,7 +56,8 @@ class RedirectHelper {
             @NotNull URI callbackUri,
             @NotNull ResolvedConnection conn,
             @NotNull OAuthCookieValue oAuthCookieValue,
-            @NotNull CryptoService cryptoService) {
+            @NotNull CryptoService cryptoService,
+            @Nullable String[] audience) {
 
         String path = findLongestPathMatching(paths, callbackUri.getPath());
 
@@ -85,6 +86,15 @@ class RedirectHelper {
 
             CodeVerifier codeVerifier = oAuthCookieValue.codeVerifier();
             authRequestBuilder.codeChallenge(codeVerifier, CodeChallengeMethod.S256);
+        }
+
+        // Add audience parameter(s) to the authentication request
+        if (audience != null && audience.length > 0) {
+            for (String aud : audience) {
+                if (aud != null && !aud.trim().isEmpty()) {
+                    authRequestBuilder.customParameter("audience", aud);
+                }
+            }
         }
 
         List<String[]> parameters = conn.additionalAuthorizationParameters().stream()
