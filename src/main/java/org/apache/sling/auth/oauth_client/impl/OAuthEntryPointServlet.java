@@ -116,6 +116,6 @@ public class OAuthEntryPointServlet extends SlingAllMethodsServlet {
         OAuthCookieValue oAuthCookieValue = new OAuthCookieValue(perRequestKey, connection.name(), redirect);
 
         return RedirectHelper.buildRedirectTarget(
-                new String[] {PATH}, callbackUri, conn, oAuthCookieValue, cryptoService);
+                new String[] {PATH}, callbackUri, conn, oAuthCookieValue, cryptoService, null);
     }
 }
