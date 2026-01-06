@@ -109,8 +109,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
     private final String[] path;
 
-    private final String[] audience;
-
     private final CryptoService cryptoService;
 
     @ObjectClassDefinition(
@@ -140,14 +138,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
         @AttributeDefinition(name = "UserInfo Enabled", description = "UserInfo Enabled")
         boolean userInfoEnabled() default true;
-
-        @AttributeDefinition(
-                name = "Audience",
-                description = "Audience values to include in the authentication request. "
-                        + "This is used to request access tokens for specific resource servers or APIs. "
-                        + "Multiple values can be specified.",
-                cardinality = Integer.MAX_VALUE)
-        String[] audience() default {};
     }
 
     @Activate
@@ -169,7 +159,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         this.userInfoEnabled = config.userInfoEnabled();
         this.pkceEnabled = config.pkceEnabled();
         this.path = config.path();
-        this.audience = config.audience();
         this.cryptoService = cryptoService;
 
         logger.debug("activate: registering ExternalIdentityProvider");
@@ -548,7 +537,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         OAuthCookieValue oAuthCookieValue =
                 new OAuthCookieValue(perRequestKey, connection.name(), redirect, nonce, codeVerifier);
 
-        return RedirectHelper.buildRedirectTarget(path, callbackUri, conn, oAuthCookieValue, cryptoService, audience);
+        return RedirectHelper.buildRedirectTarget(path, callbackUri, conn, oAuthCookieValue, cryptoService);
     }
 
     @Override
