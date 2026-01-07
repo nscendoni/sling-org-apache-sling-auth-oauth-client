@@ -367,24 +367,24 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
      */
     @Nullable
     private String fetchUserInfoJson(@NotNull String token, @NotNull ClientConnection connection) {
+        // Get userInfo URL from connection
+        String userInfoUrl = null;
+        if (connection instanceof OidcConnectionImpl) {
+            OidcConnectionImpl oidcConn = (OidcConnectionImpl) connection;
+            userInfoUrl = oidcConn.userInfoUrl();
+        }
+
+        if (userInfoUrl == null || userInfoUrl.isEmpty()) {
+            logger.debug("No userInfo URL available for connection: {}", connection.name());
+            return null;
+        }
+
+        logger.debug("Fetching user info from: {}", userInfoUrl);
+
+        java.net.HttpURLConnection urlConnection = null;
         try {
-            // Get userInfo URL from connection
-            String userInfoUrl = null;
-            if (connection instanceof OidcConnectionImpl) {
-                OidcConnectionImpl oidcConn = (OidcConnectionImpl) connection;
-                userInfoUrl = oidcConn.userInfoUrl();
-            }
-
-            if (userInfoUrl == null || userInfoUrl.isEmpty()) {
-                logger.debug("No userInfo URL available for connection: {}", connection.name());
-                return null;
-            }
-
-            logger.debug("Fetching user info from: {}", userInfoUrl);
-
             // Make HTTP request to UserInfo endpoint with configurable timeouts
-            java.net.HttpURLConnection urlConnection =
-                    (java.net.HttpURLConnection) new URL(userInfoUrl).openConnection();
+            urlConnection = (java.net.HttpURLConnection) new URL(userInfoUrl).openConnection();
             urlConnection.setRequestMethod("GET");
             urlConnection.setRequestProperty("Authorization", "Bearer " + token);
             urlConnection.setRequestProperty("Accept", "application/json");
@@ -397,9 +397,12 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
                 return null;
             }
 
-            // Parse the UserInfo response
-            String responseBody =
-                    new String(urlConnection.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            // Parse the UserInfo response using try-with-resources for the InputStream
+            String responseBody;
+            try (java.io.InputStream inputStream = urlConnection.getInputStream()) {
+                responseBody = new String(inputStream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            }
+
             com.nimbusds.oauth2.sdk.http.HTTPResponse httpResponse = new HTTPResponse(responseCode);
             httpResponse.setContentType("application/json");
             httpResponse.setContent(responseBody);
@@ -428,6 +431,11 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
         } catch (Exception e) {
             logger.debug("Failed to fetch user info: {}", e.getMessage());
             return null;
+        } finally {
+            // Always disconnect the HttpURLConnection to release resources
+            if (urlConnection != null) {
+                urlConnection.disconnect();
+            }
         }
     }
 
