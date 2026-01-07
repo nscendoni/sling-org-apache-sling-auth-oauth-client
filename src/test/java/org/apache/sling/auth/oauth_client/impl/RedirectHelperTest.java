@@ -195,10 +195,7 @@ class RedirectHelperTest {
         RedirectTarget result = RedirectHelper.buildRedirectTarget(
                 new String[] {"/"}, URI.create("/callback"), conn, oAuthCookieValue, cryptoService, audience);
 
-        assertNotNull(result);
-        assertNotNull(result.uri());
-        String uriString = result.uri().toString();
-        assertFalse(uriString.contains("resource="), "Expected no resource parameter in URI but got: " + uriString);
+        assertRedirectTargetHasNoResourceParameter(result);
     }
 
     @Test
@@ -211,10 +208,7 @@ class RedirectHelperTest {
         RedirectTarget result = RedirectHelper.buildRedirectTarget(
                 new String[] {"/"}, URI.create("/callback"), conn, oAuthCookieValue, cryptoService, null);
 
-        assertNotNull(result);
-        assertNotNull(result.uri());
-        String uriString = result.uri().toString();
-        assertFalse(uriString.contains("resource="), "Expected no resource parameter in URI but got: " + uriString);
+        assertRedirectTargetHasNoResourceParameter(result);
     }
 
     @Test
@@ -249,5 +243,12 @@ class RedirectHelperTest {
         when(conn.scopes()).thenReturn(List.of("openid"));
         when(conn.additionalAuthorizationParameters()).thenReturn(List.of());
         return conn;
+    }
+
+    private void assertRedirectTargetHasNoResourceParameter(RedirectTarget result) {
+        assertNotNull(result);
+        assertNotNull(result.uri());
+        String uriString = result.uri().toString();
+        assertFalse(uriString.contains("resource="), "Expected no resource parameter in URI but got: " + uriString);
     }
 }
