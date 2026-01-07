@@ -48,8 +48,22 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Online token validator that validates tokens using OAuth2 token introspection.
- * This validator calls the introspection endpoint of the OIDC provider to verify
- * that the token is active and retrieve its claims.
+ *
+ * <p>This validator calls the introspection endpoint of the OIDC provider to verify
+ * that the token is active and retrieve its claims. This approach is more secure than
+ * offline validation as it can detect revoked tokens, but it requires a network call
+ * for each validation.</p>
+ *
+ * <h2>When to Use</h2>
+ * <ul>
+ *   <li>When token revocation must be detected immediately</li>
+ *   <li>When opaque (non-JWT) tokens are used</li>
+ *   <li>When the authorization server supports introspection</li>
+ * </ul>
+ *
+ * @see AbstractTokenValidator
+ * @see TokenValidator
+ * @since 0.1.7
  */
 @Component(service = TokenValidator.class)
 @Designate(ocd = OnlineTokenValidator.Config.class, factory = true)
@@ -65,6 +79,7 @@ public class OnlineTokenValidator extends AbstractTokenValidator {
                 name = "Validator Name",
                 description =
                         "Unique name for this token validator instance. Used to reference this validator from authentication handlers.")
+        @NotNull
         String name();
 
         @AttributeDefinition(
@@ -72,6 +87,7 @@ public class OnlineTokenValidator extends AbstractTokenValidator {
                 description =
                         "List of accepted OAuth2 client IDs. Only tokens issued to one of these client IDs will be accepted. If not configured or empty, client ID validation is skipped.",
                 cardinality = Integer.MAX_VALUE)
+        @Nullable
         String[] acceptedClientIds() default {};
 
         @AttributeDefinition(
@@ -79,6 +95,7 @@ public class OnlineTokenValidator extends AbstractTokenValidator {
                 description =
                         "List of required OAuth2 scopes. Tokens must have ALL of these scopes to be accepted. If not configured or empty, scope validation is skipped.",
                 cardinality = Integer.MAX_VALUE)
+        @Nullable
         String[] requiredScopes() default {};
 
         @AttributeDefinition(
@@ -86,18 +103,21 @@ public class OnlineTokenValidator extends AbstractTokenValidator {
                 description =
                         "List of required audiences. Tokens must have at least one of these audiences to be accepted. If not configured or empty, audience validation is skipped.",
                 cardinality = Integer.MAX_VALUE)
+        @Nullable
         String[] requiredAudiences() default {};
     }
 
+    /**
+     * Activates the online token validator with the given configuration.
+     *
+     * @param config the OSGi configuration
+     * @throws IllegalArgumentException if the configuration is invalid
+     */
     @Activate
-    public OnlineTokenValidator(Config config) {
+    public OnlineTokenValidator(@NotNull Config config) {
         super(config.name(), config.acceptedClientIds(), config.requiredScopes(), config.requiredAudiences());
 
-        if (config.name() == null || config.name().isEmpty()) {
-            throw new IllegalArgumentException("Validator name must be configured");
-        }
-
-        // Validate that all configured values are non-empty strings
+        validateName(config.name());
         validateConfigArray(config.acceptedClientIds(), "Accepted client IDs");
         validateConfigArray(config.requiredScopes(), "Required scopes");
         validateConfigArray(config.requiredAudiences(), "Required audiences");
@@ -105,31 +125,12 @@ public class OnlineTokenValidator extends AbstractTokenValidator {
         logger.info("OnlineTokenValidator '{}' activated", config.name());
     }
 
-    private void validateConfigArray(String[] values, String configName) {
-        if (values != null) {
-            for (String value : values) {
-                if (value == null || value.trim().isEmpty()) {
-                    throw new IllegalArgumentException(configName
-                            + " configuration contains empty or null values. All entries must be non-empty strings.");
-                }
-            }
-        }
-    }
-
     @Override
     @Nullable
     protected TokenValidationResult doValidate(@NotNull String token, @NotNull ClientConnection connection) {
         try {
             // Get introspection endpoint from connection
-            String endpoint = null;
-            if (connection instanceof OidcConnectionImpl) {
-                OidcConnectionImpl oidcConn = (OidcConnectionImpl) connection;
-                URI introspectionUri = oidcConn.introspectionEndpoint();
-                if (introspectionUri != null) {
-                    endpoint = introspectionUri.toString();
-                    logger.debug("Using introspection endpoint: {}", endpoint);
-                }
-            }
+            String endpoint = getIntrospectionEndpoint(connection);
 
             if (endpoint == null || endpoint.isEmpty()) {
                 logger.debug(
@@ -175,9 +176,7 @@ public class OnlineTokenValidator extends AbstractTokenValidator {
             }
 
             // Extract claims from introspection response
-            String subject = successResponse.getSubject() != null
-                    ? successResponse.getSubject().getValue()
-                    : null;
+            String subject = extractSubject(successResponse);
             if (subject == null || subject.isEmpty()) {
                 logger.debug("Token has no subject claim");
                 return null;
@@ -196,10 +195,48 @@ public class OnlineTokenValidator extends AbstractTokenValidator {
     }
 
     /**
-     * Builds a JWTClaimsSet from the introspection response.
+     * Gets the introspection endpoint from the connection.
+     *
+     * @param connection the client connection
+     * @return the introspection endpoint URL, or {@code null} if not available
      */
+    @Nullable
+    private String getIntrospectionEndpoint(@NotNull ClientConnection connection) {
+        if (connection instanceof OidcConnectionImpl) {
+            OidcConnectionImpl oidcConn = (OidcConnectionImpl) connection;
+            URI introspectionUri = oidcConn.introspectionEndpoint();
+            if (introspectionUri != null) {
+                String endpoint = introspectionUri.toString();
+                logger.debug("Using introspection endpoint: {}", endpoint);
+                return endpoint;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Extracts the subject from the introspection response.
+     *
+     * @param successResponse the successful introspection response
+     * @return the subject, or {@code null} if not present
+     */
+    @Nullable
+    private String extractSubject(@NotNull TokenIntrospectionSuccessResponse successResponse) {
+        return successResponse.getSubject() != null
+                ? successResponse.getSubject().getValue()
+                : null;
+    }
+
+    /**
+     * Builds a JWTClaimsSet from the introspection response.
+     *
+     * @param successResponse the successful introspection response
+     * @param subject the subject to include in the claims set
+     * @return the JWT claims set
+     */
+    @NotNull
     private JWTClaimsSet buildClaimsSetFromIntrospection(
-            TokenIntrospectionSuccessResponse successResponse, String subject) {
+            @NotNull TokenIntrospectionSuccessResponse successResponse, @NotNull String subject) {
         JWTClaimsSet.Builder claimsBuilder = new JWTClaimsSet.Builder().subject(subject);
 
         if (successResponse.getIssuer() != null) {
@@ -225,6 +262,19 @@ public class OnlineTokenValidator extends AbstractTokenValidator {
         }
 
         // Extract client_id from the JSON object
+        extractClientIdFromJson(successResponse, claimsBuilder);
+
+        return claimsBuilder.build();
+    }
+
+    /**
+     * Extracts the client_id from the introspection response JSON and adds it to the claims builder.
+     *
+     * @param successResponse the successful introspection response
+     * @param claimsBuilder the claims builder to add the client_id to
+     */
+    private void extractClientIdFromJson(
+            @NotNull TokenIntrospectionSuccessResponse successResponse, @NotNull JWTClaimsSet.Builder claimsBuilder) {
         try {
             JSONObject jsonObject = successResponse.toJSONObject();
             if (jsonObject.containsKey("client_id")) {
@@ -233,7 +283,5 @@ public class OnlineTokenValidator extends AbstractTokenValidator {
         } catch (Exception e) {
             logger.debug("Failed to extract client_id from introspection response: {}", e.getMessage());
         }
-
-        return claimsBuilder.build();
     }
 }

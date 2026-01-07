@@ -43,6 +43,7 @@ import org.apache.sling.auth.oauth_client.spi.TokenValidator;
 import org.apache.sling.auth.oauth_client.spi.UserInfoProcessor;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.osgi.framework.BundleContext;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
@@ -56,7 +57,22 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Authentication handler that validates bearer tokens from the Authorization header.
- * Valid tokens are cached to improve performance.
+ *
+ * <p>This handler extracts bearer tokens from the HTTP Authorization header, validates them
+ * using a configured {@link TokenValidator}, and creates authentication credentials for
+ * valid tokens.</p>
+ *
+ * <h2>Features</h2>
+ * <ul>
+ *   <li>Token validation via pluggable {@link TokenValidator} services</li>
+ *   <li>Optional user info fetching from the OIDC UserInfo endpoint</li>
+ *   <li>Token caching for improved performance</li>
+ *   <li>Integration with {@link UserInfoProcessor} for custom credential creation</li>
+ * </ul>
+ *
+ * @see TokenValidator
+ * @see UserInfoProcessor
+ * @since 0.1.7
  */
 @Component(service = AuthenticationHandler.class, immediate = true)
 @Designate(ocd = OidcBearerAuthenticationHandler.Config.class, factory = true)
@@ -67,27 +83,45 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
     private static final String AUTH_TYPE = "oidc-bearer";
     private static final String BEARER_PREFIX = "Bearer ";
 
+    /**
+     * Default HTTP connection timeout in milliseconds.
+     */
+    private static final int DEFAULT_HTTP_CONNECT_TIMEOUT_MS = 5000;
+
+    /**
+     * Default HTTP read timeout in milliseconds.
+     */
+    private static final int DEFAULT_HTTP_READ_TIMEOUT_MS = 5000;
+
+    @NotNull
     private final Map<String, ClientConnection> connections;
+
+    @NotNull
     private final Map<String, TokenValidator> tokenValidators;
+
+    @NotNull
     private final Map<String, UserInfoProcessor> userInfoProcessors;
+
+    @NotNull
     private final String idp;
+
+    @NotNull
     private final String connectionName;
+
+    @NotNull
     private final String validatorName;
+
+    @NotNull
     private final String[] path;
+
     private final long cacheTtlSeconds;
     private final int cacheMaxSize;
     private final boolean fetchUserInfo;
-
-    /**
-     * Gets the configured connection.
-     *
-     * @return the connection to use, or null if not found
-     */
-    private ClientConnection getConnection() {
-        return connections.get(connectionName);
-    }
+    private final int httpConnectTimeoutMs;
+    private final int httpReadTimeoutMs;
 
     // Cache structure: token -> CachedToken
+    @NotNull
     private final Map<String, CachedToken> tokenCache = new ConcurrentHashMap<>();
 
     @ObjectClassDefinition(
@@ -99,23 +133,27 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
                 description =
                         "Repository path for which this authentication handler should be used by Sling. If this is "
                                 + "empty, the authentication handler will be disabled. By default this is set to \"/\".")
+        @NotNull
         String[] path() default {"/"};
 
         @AttributeDefinition(
                 name = "Sync Handler Configuration Name",
                 description = "Name of Sync Handler Configuration")
+        @NotNull
         String idp() default "oidc-bearer";
 
         @AttributeDefinition(
                 name = "Connection Name",
                 description =
                         "Name of the OIDC connection to use for bearer token validation. REQUIRED: Must be configured with a valid connection name.")
+        @NotNull
         String connectionName();
 
         @AttributeDefinition(
                 name = "Token Validator Name",
                 description =
                         "Name of the token validator service to use for token validation. REQUIRED: Must be configured with a valid validator name (e.g., an OfflineTokenValidator or OnlineTokenValidator instance).")
+        @NotNull
         String validatorName();
 
         @AttributeDefinition(
@@ -135,17 +173,49 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
                 description = "Maximum number of tokens to cache. Default is 1000.")
         int cacheMaxSize() default 1000;
 
+        @AttributeDefinition(
+                name = "HTTP Connect Timeout (ms)",
+                description =
+                        "Timeout in milliseconds for establishing HTTP connections (e.g., to UserInfo endpoint). Default: 5000ms.")
+        int httpConnectTimeoutMs() default 5000;
+
+        @AttributeDefinition(
+                name = "HTTP Read Timeout (ms)",
+                description =
+                        "Timeout in milliseconds for reading HTTP responses (e.g., from UserInfo endpoint). Default: 5000ms.")
+        int httpReadTimeoutMs() default 5000;
+
         @AttributeDefinition(name = "Service Ranking", description = "Service ranking for this authentication handler")
         int service_ranking() default 0;
     }
 
+    /**
+     * Gets the configured connection.
+     *
+     * @return the connection to use, or {@code null} if not found
+     */
+    @Nullable
+    private ClientConnection getConnection() {
+        return connections.get(connectionName);
+    }
+
+    /**
+     * Activates the bearer authentication handler with the given configuration.
+     *
+     * @param bundleContext the OSGi bundle context
+     * @param connections the available client connections
+     * @param tokenValidators the available token validators
+     * @param userInfoProcessors the available user info processors
+     * @param config the OSGi configuration
+     * @throws IllegalArgumentException if the configuration is invalid
+     */
     @Activate
     public OidcBearerAuthenticationHandler(
             @NotNull BundleContext bundleContext,
-            @Reference List<ClientConnection> connections,
-            @Reference List<TokenValidator> tokenValidators,
-            @Reference(policyOption = ReferencePolicyOption.GREEDY) List<UserInfoProcessor> userInfoProcessors,
-            Config config) {
+            @NotNull @Reference List<ClientConnection> connections,
+            @NotNull @Reference List<TokenValidator> tokenValidators,
+            @NotNull @Reference(policyOption = ReferencePolicyOption.GREEDY) List<UserInfoProcessor> userInfoProcessors,
+            @NotNull Config config) {
 
         this.connections = connections.stream().collect(Collectors.toMap(ClientConnection::name, Function.identity()));
         this.tokenValidators =
@@ -159,6 +229,12 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
         this.cacheTtlSeconds = config.cacheTtlSeconds();
         this.cacheMaxSize = config.cacheMaxSize();
         this.fetchUserInfo = config.fetchUserInfo();
+
+        // Initialize HTTP timeouts with validation
+        int connectTimeout = config.httpConnectTimeoutMs();
+        int readTimeout = config.httpReadTimeoutMs();
+        this.httpConnectTimeoutMs = connectTimeout > 0 ? connectTimeout : DEFAULT_HTTP_CONNECT_TIMEOUT_MS;
+        this.httpReadTimeoutMs = readTimeout > 0 ? readTimeout : DEFAULT_HTTP_READ_TIMEOUT_MS;
 
         // Validate that connectionName is configured
         if (connectionName == null || connectionName.isEmpty()) {
@@ -199,14 +275,18 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
                 null);
 
         logger.info(
-                "OidcBearerAuthenticationHandler successfully activated with connection: {}, validator: {}, cache TTL: {}s, max size: {}",
+                "OidcBearerAuthenticationHandler successfully activated with connection: {}, validator: {}, "
+                        + "cache TTL: {}s, max size: {}, HTTP timeouts: connect={}ms, read={}ms",
                 connectionName,
                 validatorName,
                 cacheTtlSeconds,
-                cacheMaxSize);
+                cacheMaxSize,
+                httpConnectTimeoutMs,
+                httpReadTimeoutMs);
     }
 
     @Override
+    @Nullable
     public AuthenticationInfo extractCredentials(
             @NotNull HttpServletRequest request, @NotNull HttpServletResponse response) {
         logger.debug("extractCredentials: checking for bearer token");
@@ -283,8 +363,9 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
      *
      * @param token the bearer token to use for authentication
      * @param connection the OIDC connection
-     * @return user info as JSON string, or null if fetch fails
+     * @return user info as JSON string, or {@code null} if fetch fails
      */
+    @Nullable
     private String fetchUserInfoJson(@NotNull String token, @NotNull ClientConnection connection) {
         try {
             // Get userInfo URL from connection
@@ -301,14 +382,14 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
 
             logger.debug("Fetching user info from: {}", userInfoUrl);
 
-            // Make HTTP request to UserInfo endpoint
+            // Make HTTP request to UserInfo endpoint with configurable timeouts
             java.net.HttpURLConnection urlConnection =
                     (java.net.HttpURLConnection) new URL(userInfoUrl).openConnection();
             urlConnection.setRequestMethod("GET");
             urlConnection.setRequestProperty("Authorization", "Bearer " + token);
             urlConnection.setRequestProperty("Accept", "application/json");
-            urlConnection.setConnectTimeout(5000);
-            urlConnection.setReadTimeout(5000);
+            urlConnection.setConnectTimeout(httpConnectTimeoutMs);
+            urlConnection.setReadTimeout(httpReadTimeoutMs);
 
             int responseCode = urlConnection.getResponseCode();
             if (responseCode != 200) {
@@ -355,15 +436,16 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
      *
      * @param subject the subject from the token
      * @param connection the OIDC connection used for validation
-     * @param userInfoJson the user info JSON (may be null)
+     * @param userInfoJson the user info JSON (may be {@code null})
      * @param tokenClaims the token claims as a map
      * @param token the raw token string
      * @return AuthenticationInfo object
      */
-    private @NotNull AuthenticationInfo createAuthenticationInfoWithProcessor(
+    @NotNull
+    private AuthenticationInfo createAuthenticationInfoWithProcessor(
             @NotNull String subject,
             @NotNull ClientConnection connection,
-            String userInfoJson,
+            @Nullable String userInfoJson,
             @NotNull Map<String, Object> tokenClaims,
             @NotNull String token) {
 
@@ -406,7 +488,8 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
      * @param token the raw token string
      * @return AuthenticationInfo object
      */
-    private @NotNull AuthenticationInfo createAuthenticationInfoFallback(
+    @NotNull
+    private AuthenticationInfo createAuthenticationInfoFallback(
             @NotNull String subject, @NotNull Map<String, Object> tokenClaims, @NotNull String token) {
         AuthenticationInfo authInfo = new AuthenticationInfo(AUTH_TYPE, subject);
 
@@ -426,14 +509,15 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
     }
 
     /**
-     * Creates an AuthenticationInfo object from the validated token.
+     * Creates an AuthenticationInfo object from the validated token (used for cached tokens).
      *
      * @param subject the subject from the token
      * @param claimsSet the JWT claims set
      * @param token the raw token string
      * @return the AuthenticationInfo object
      */
-    private @NotNull AuthenticationInfo createAuthenticationInfo(
+    @NotNull
+    private AuthenticationInfo createAuthenticationInfo(
             @NotNull String subject, @NotNull JWTClaimsSet claimsSet, @NotNull String token) {
         AuthenticationInfo authInfo = new AuthenticationInfo(AUTH_TYPE, subject);
 
@@ -517,7 +601,7 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
     }
 
     @Override
-    public void dropCredentials(HttpServletRequest request, HttpServletResponse response) {
+    public void dropCredentials(@Nullable HttpServletRequest request, @Nullable HttpServletResponse response) {
         // For bearer tokens, we don't need to do anything special on logout
         // The client should discard the token
         logger.debug("dropCredentials called");
@@ -527,12 +611,16 @@ public class OidcBearerAuthenticationHandler extends DefaultAuthenticationFeedba
      * Internal class to represent a cached token with expiration.
      */
     private static class CachedToken {
+        @NotNull
         final String subject;
+
+        @NotNull
         final JWTClaimsSet claimsSet;
+
         final long cachedAt;
         final long ttlMillis;
 
-        CachedToken(String subject, JWTClaimsSet claimsSet, long ttlSeconds) {
+        CachedToken(@NotNull String subject, @NotNull JWTClaimsSet claimsSet, long ttlSeconds) {
             this.subject = subject;
             this.claimsSet = claimsSet;
             this.cachedAt = System.currentTimeMillis();
