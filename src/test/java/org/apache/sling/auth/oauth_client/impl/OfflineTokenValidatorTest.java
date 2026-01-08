@@ -250,4 +250,140 @@ class OfflineTokenValidatorTest {
                 createOfflineConfig(VALIDATOR_NAME, null, null, new String[] {"different-audience"}));
         assertNull(validator.validate(support.createValidToken(), connection));
     }
+
+    // ============ Algorithm Validation Tests ============
+
+    @Test
+    void testActivation_NoneAlgorithm_ThrowsException() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new OfflineTokenValidator(createOfflineConfig(
+                        VALIDATOR_NAME, null, null, null, new String[] {"RS256", "none"}, 60, 300)));
+    }
+
+    @Test
+    void testActivation_NoneAlgorithmUppercase_ThrowsException() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new OfflineTokenValidator(createOfflineConfig(
+                        VALIDATOR_NAME, null, null, null, new String[] {"RS256", "NONE"}, 60, 300)));
+    }
+
+    @Test
+    void testValidate_DisallowedAlgorithm_ReturnsNull() throws Exception {
+        // Only allow ES256, but token is signed with RS256
+        OfflineTokenValidator validator = new OfflineTokenValidator(
+                createOfflineConfig(VALIDATOR_NAME, null, null, null, new String[] {"ES256"}, 60, 300));
+        assertNull(validator.validate(support.createValidToken(), connection));
+    }
+
+    @Test
+    void testValidate_AllowedAlgorithm_Passes() throws Exception {
+        // Explicitly allow RS256
+        OfflineTokenValidator validator = new OfflineTokenValidator(
+                createOfflineConfig(VALIDATOR_NAME, null, null, null, new String[] {"RS256"}, 60, 300));
+        assertNotNull(validator.validate(support.createValidToken(), connection));
+    }
+
+    // ============ Not-Before (nbf) Validation Tests ============
+
+    @Test
+    void testValidate_TokenNotYetValid_ReturnsNull() throws Exception {
+        OfflineTokenValidator validator =
+                new OfflineTokenValidator(createOfflineConfig(VALIDATOR_NAME, null, null, null));
+
+        // Create a token with nbf set to 1 hour in the future
+        JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
+                .issuer(ISSUER)
+                .subject(SUBJECT)
+                .audience(DEFAULT_AUDIENCE)
+                .expirationTime(new Date(System.currentTimeMillis() + 7200000)) // 2 hours from now
+                .notBeforeTime(new Date(System.currentTimeMillis() + 3600000)) // 1 hour from now
+                .issueTime(new Date())
+                .claim("client_id", CLIENT_ID)
+                .claim("scope", DEFAULT_SCOPE)
+                .build();
+
+        assertNull(validator.validate(support.createTokenWithClaims(claimsSet), connection));
+    }
+
+    @Test
+    void testValidate_TokenWithNbfInPast_Passes() throws Exception {
+        OfflineTokenValidator validator =
+                new OfflineTokenValidator(createOfflineConfig(VALIDATOR_NAME, null, null, null));
+
+        // Create a token with nbf set to 1 hour in the past
+        JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
+                .issuer(ISSUER)
+                .subject(SUBJECT)
+                .audience(DEFAULT_AUDIENCE)
+                .expirationTime(new Date(System.currentTimeMillis() + 3600000))
+                .notBeforeTime(new Date(System.currentTimeMillis() - 3600000)) // 1 hour ago
+                .issueTime(new Date())
+                .claim("client_id", CLIENT_ID)
+                .claim("scope", DEFAULT_SCOPE)
+                .build();
+
+        assertNotNull(validator.validate(support.createTokenWithClaims(claimsSet), connection));
+    }
+
+    // ============ Clock Skew Tests ============
+
+    @Test
+    void testValidate_TokenWithinClockSkew_Passes() throws Exception {
+        // Use large clock skew (2 hours)
+        OfflineTokenValidator validator =
+                new OfflineTokenValidator(createOfflineConfig(VALIDATOR_NAME, null, null, null, null, 7200, 300));
+
+        // Create a token that expired 1 hour ago (but within 2 hour clock skew)
+        JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
+                .issuer(ISSUER)
+                .subject(SUBJECT)
+                .audience(DEFAULT_AUDIENCE)
+                .expirationTime(new Date(System.currentTimeMillis() - 3600000)) // 1 hour ago
+                .issueTime(new Date(System.currentTimeMillis() - 7200000))
+                .claim("client_id", CLIENT_ID)
+                .claim("scope", DEFAULT_SCOPE)
+                .build();
+
+        assertNotNull(validator.validate(support.createTokenWithClaims(claimsSet), connection));
+    }
+
+    // ============ JWK Cache Tests ============
+
+    @Test
+    void testValidate_JwkCacheDisabled_StillWorks() throws Exception {
+        // Disable JWK caching (TTL = 0)
+        OfflineTokenValidator validator =
+                new OfflineTokenValidator(createOfflineConfig(VALIDATOR_NAME, null, null, null, null, 60, 0));
+
+        assertNotNull(validator.validate(support.createValidToken(), connection));
+    }
+
+    @Test
+    void testValidate_JwkCacheEnabled_UsesCache() throws Exception {
+        OfflineTokenValidator validator =
+                new OfflineTokenValidator(createOfflineConfig(VALIDATOR_NAME, null, null, null));
+
+        // First call - should fetch JWK Set
+        assertNotNull(validator.validate(support.createValidToken(), connection));
+
+        // Second call - should use cached JWK Set
+        assertNotNull(validator.validate(support.createValidToken(), connection));
+    }
+
+    @Test
+    void testClearJWKSetCache() throws Exception {
+        OfflineTokenValidator validator =
+                new OfflineTokenValidator(createOfflineConfig(VALIDATOR_NAME, null, null, null));
+
+        // Populate the cache
+        assertNotNull(validator.validate(support.createValidToken(), connection));
+
+        // Clear the cache
+        validator.clearJWKSetCache();
+
+        // Should still work after cache is cleared
+        assertNotNull(validator.validate(support.createValidToken(), connection));
+    }
 }

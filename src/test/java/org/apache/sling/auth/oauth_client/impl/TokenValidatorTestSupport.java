@@ -181,9 +181,27 @@ class TokenValidatorTestSupport {
      */
     static OfflineTokenValidator.Config createOfflineConfig(
             String name, String[] acceptedClientIds, String[] requiredScopes, String[] requiredAudiences) {
-        return Converters.standardConverter()
-                .convert(createConfigMap(name, acceptedClientIds, requiredScopes, requiredAudiences))
-                .to(OfflineTokenValidator.Config.class);
+        return createOfflineConfig(name, acceptedClientIds, requiredScopes, requiredAudiences, null, 60, 300);
+    }
+
+    /**
+     * Creates an OfflineTokenValidator config with full customization.
+     */
+    static OfflineTokenValidator.Config createOfflineConfig(
+            String name,
+            String[] acceptedClientIds,
+            String[] requiredScopes,
+            String[] requiredAudiences,
+            String[] allowedAlgorithms,
+            long clockSkewSeconds,
+            long jwkCacheTtlSeconds) {
+        Map<String, Object> configMap = createConfigMap(name, acceptedClientIds, requiredScopes, requiredAudiences);
+        if (allowedAlgorithms != null) {
+            configMap.put("allowedAlgorithms", allowedAlgorithms);
+        }
+        configMap.put("clockSkewSeconds", clockSkewSeconds);
+        configMap.put("jwkCacheTtlSeconds", jwkCacheTtlSeconds);
+        return Converters.standardConverter().convert(configMap).to(OfflineTokenValidator.Config.class);
     }
 
     /**
