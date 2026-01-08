@@ -1289,4 +1289,209 @@ class OidcAuthenticationHandlerTest {
             return false;
         }));
     }
+
+    @Test
+    void requestCredentialsWithResourceAttribute() {
+        // This is the class used by Sling to configure the Authentication Handler
+        OidcProviderMetadataRegistry oidcProviderMetadataRegistry = mock(OidcProviderMetadataRegistry.class);
+        String mockIdPUrl = "http://localhost:8080";
+        when(oidcProviderMetadataRegistry.getJWKSetURI(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/jwks.json"));
+        when(oidcProviderMetadataRegistry.getIssuer(mockIdPUrl)).thenReturn(ISSUER);
+        when(oidcProviderMetadataRegistry.getAuthorizationEndpoint(mockIdPUrl))
+                .thenReturn(URI.create(mockIdPUrl + "/authorize"));
+        when(oidcProviderMetadataRegistry.getTokenEndpoint(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/token"));
+
+        connections.add(new MockOidcConnection(
+                new String[] {"openid"},
+                MOCK_OIDC_PARAM,
+                "client-id",
+                "client-secret",
+                "http://localhost:8080",
+                new String[] {"access_type=offline"},
+                oidcProviderMetadataRegistry));
+
+        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
+        when(config.callbackUri()).thenReturn("http://redirect");
+        when(config.pkceEnabled()).thenReturn(false);
+        when(config.path()).thenReturn(new String[] {"/"});
+        when(config.resource()).thenReturn(new String[] {"https://api.example.com"});
+
+        when(request.getRequestURI()).thenReturn("/");
+        MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
+
+        createOidcAuthenticationHandler();
+        assertTrue(oidcAuthenticationHandler.requestCredentials(request, mockResponse));
+
+        // Verify that the resource parameter is present in the redirect URL
+        assertEquals(302, mockResponse.getStatus());
+        String location = mockResponse.getHeader("location");
+        assertTrue(
+                location.contains("resource=https%3A%2F%2Fapi.example.com"),
+                "Expected resource parameter in redirect URL but got: " + location);
+    }
+
+    @Test
+    void requestCredentialsWithMultipleResourceAttributes() {
+        // This is the class used by Sling to configure the Authentication Handler
+        OidcProviderMetadataRegistry oidcProviderMetadataRegistry = mock(OidcProviderMetadataRegistry.class);
+        String mockIdPUrl = "http://localhost:8080";
+        when(oidcProviderMetadataRegistry.getJWKSetURI(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/jwks.json"));
+        when(oidcProviderMetadataRegistry.getIssuer(mockIdPUrl)).thenReturn(ISSUER);
+        when(oidcProviderMetadataRegistry.getAuthorizationEndpoint(mockIdPUrl))
+                .thenReturn(URI.create(mockIdPUrl + "/authorize"));
+        when(oidcProviderMetadataRegistry.getTokenEndpoint(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/token"));
+
+        connections.add(new MockOidcConnection(
+                new String[] {"openid"},
+                MOCK_OIDC_PARAM,
+                "client-id",
+                "client-secret",
+                "http://localhost:8080",
+                new String[] {"access_type=offline"},
+                oidcProviderMetadataRegistry));
+
+        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
+        when(config.callbackUri()).thenReturn("http://redirect");
+        when(config.pkceEnabled()).thenReturn(false);
+        when(config.path()).thenReturn(new String[] {"/"});
+        when(config.resource()).thenReturn(new String[] {"https://api1.example.com", "https://api2.example.com"});
+
+        when(request.getRequestURI()).thenReturn("/");
+        MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
+
+        createOidcAuthenticationHandler();
+        assertTrue(oidcAuthenticationHandler.requestCredentials(request, mockResponse));
+
+        // Verify that both resource parameters are present in the redirect URL
+        assertEquals(302, mockResponse.getStatus());
+        String location = mockResponse.getHeader("location");
+        assertTrue(
+                location.contains("resource=https%3A%2F%2Fapi1.example.com"),
+                "Expected first resource parameter in redirect URL but got: " + location);
+        assertTrue(
+                location.contains("resource=https%3A%2F%2Fapi2.example.com"),
+                "Expected second resource parameter in redirect URL but got: " + location);
+    }
+
+    @Test
+    void requestCredentialsWithEmptyResourceAttribute() {
+        // This is the class used by Sling to configure the Authentication Handler
+        OidcProviderMetadataRegistry oidcProviderMetadataRegistry = mock(OidcProviderMetadataRegistry.class);
+        String mockIdPUrl = "http://localhost:8080";
+        when(oidcProviderMetadataRegistry.getJWKSetURI(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/jwks.json"));
+        when(oidcProviderMetadataRegistry.getIssuer(mockIdPUrl)).thenReturn(ISSUER);
+        when(oidcProviderMetadataRegistry.getAuthorizationEndpoint(mockIdPUrl))
+                .thenReturn(URI.create(mockIdPUrl + "/authorize"));
+        when(oidcProviderMetadataRegistry.getTokenEndpoint(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/token"));
+
+        connections.add(new MockOidcConnection(
+                new String[] {"openid"},
+                MOCK_OIDC_PARAM,
+                "client-id",
+                "client-secret",
+                "http://localhost:8080",
+                new String[] {"access_type=offline"},
+                oidcProviderMetadataRegistry));
+
+        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
+        when(config.callbackUri()).thenReturn("http://redirect");
+        when(config.pkceEnabled()).thenReturn(false);
+        when(config.path()).thenReturn(new String[] {"/"});
+        when(config.resource()).thenReturn(new String[] {});
+
+        when(request.getRequestURI()).thenReturn("/");
+        MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
+
+        createOidcAuthenticationHandler();
+        assertTrue(oidcAuthenticationHandler.requestCredentials(request, mockResponse));
+
+        // Verify that no resource parameter is present in the redirect URL
+        assertEquals(302, mockResponse.getStatus());
+        String location = mockResponse.getHeader("location");
+        assertFalse(
+                location.contains("resource="), "Expected no resource parameter in redirect URL but got: " + location);
+    }
+
+    @Test
+    void requestCredentialsWithNullResourceAttribute() {
+        // This is the class used by Sling to configure the Authentication Handler
+        OidcProviderMetadataRegistry oidcProviderMetadataRegistry = mock(OidcProviderMetadataRegistry.class);
+        String mockIdPUrl = "http://localhost:8080";
+        when(oidcProviderMetadataRegistry.getJWKSetURI(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/jwks.json"));
+        when(oidcProviderMetadataRegistry.getIssuer(mockIdPUrl)).thenReturn(ISSUER);
+        when(oidcProviderMetadataRegistry.getAuthorizationEndpoint(mockIdPUrl))
+                .thenReturn(URI.create(mockIdPUrl + "/authorize"));
+        when(oidcProviderMetadataRegistry.getTokenEndpoint(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/token"));
+
+        connections.add(new MockOidcConnection(
+                new String[] {"openid"},
+                MOCK_OIDC_PARAM,
+                "client-id",
+                "client-secret",
+                "http://localhost:8080",
+                new String[] {"access_type=offline"},
+                oidcProviderMetadataRegistry));
+
+        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
+        when(config.callbackUri()).thenReturn("http://redirect");
+        when(config.pkceEnabled()).thenReturn(false);
+        when(config.path()).thenReturn(new String[] {"/"});
+        when(config.resource()).thenReturn(null);
+
+        when(request.getRequestURI()).thenReturn("/");
+        MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
+
+        createOidcAuthenticationHandler();
+        assertTrue(oidcAuthenticationHandler.requestCredentials(request, mockResponse));
+
+        // Verify that no resource parameter is present in the redirect URL
+        assertEquals(302, mockResponse.getStatus());
+        String location = mockResponse.getHeader("location");
+        assertFalse(
+                location.contains("resource="), "Expected no resource parameter in redirect URL but got: " + location);
+    }
+
+    @Test
+    void requestCredentialsWithResourceAttributeContainingEmptyStrings() {
+        // This is the class used by Sling to configure the Authentication Handler
+        OidcProviderMetadataRegistry oidcProviderMetadataRegistry = mock(OidcProviderMetadataRegistry.class);
+        String mockIdPUrl = "http://localhost:8080";
+        when(oidcProviderMetadataRegistry.getJWKSetURI(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/jwks.json"));
+        when(oidcProviderMetadataRegistry.getIssuer(mockIdPUrl)).thenReturn(ISSUER);
+        when(oidcProviderMetadataRegistry.getAuthorizationEndpoint(mockIdPUrl))
+                .thenReturn(URI.create(mockIdPUrl + "/authorize"));
+        when(oidcProviderMetadataRegistry.getTokenEndpoint(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/token"));
+
+        connections.add(new MockOidcConnection(
+                new String[] {"openid"},
+                MOCK_OIDC_PARAM,
+                "client-id",
+                "client-secret",
+                "http://localhost:8080",
+                new String[] {"access_type=offline"},
+                oidcProviderMetadataRegistry));
+
+        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
+        when(config.callbackUri()).thenReturn("http://redirect");
+        when(config.pkceEnabled()).thenReturn(false);
+        when(config.path()).thenReturn(new String[] {"/"});
+        // Array with empty strings and whitespace should be filtered out
+        when(config.resource()).thenReturn(new String[] {"", "  ", "https://api.example.com"});
+
+        when(request.getRequestURI()).thenReturn("/");
+        MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
+
+        createOidcAuthenticationHandler();
+        assertTrue(oidcAuthenticationHandler.requestCredentials(request, mockResponse));
+
+        // Verify that only the valid resource parameter is present in the redirect URL
+        assertEquals(302, mockResponse.getStatus());
+        String location = mockResponse.getHeader("location");
+        assertTrue(
+                location.contains("resource=https%3A%2F%2Fapi.example.com"),
+                "Expected valid resource parameter in redirect URL but got: " + location);
+        // Count occurrences of "resource=" - should be exactly 1
+        int count = location.split("resource=", -1).length - 1;
+        assertEquals(1, count, "Expected exactly one resource parameter but found " + count);
+    }
 }

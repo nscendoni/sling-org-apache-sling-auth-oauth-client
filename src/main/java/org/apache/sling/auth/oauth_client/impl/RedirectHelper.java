@@ -56,7 +56,8 @@ class RedirectHelper {
             @NotNull URI callbackUri,
             @NotNull ResolvedConnection conn,
             @NotNull OAuthCookieValue oAuthCookieValue,
-            @NotNull CryptoService cryptoService) {
+            @NotNull CryptoService cryptoService,
+            @Nullable String[] resource) {
 
         String path = findLongestPathMatching(paths, callbackUri.getPath());
 
@@ -85,6 +86,17 @@ class RedirectHelper {
 
             CodeVerifier codeVerifier = oAuthCookieValue.codeVerifier();
             authRequestBuilder.codeChallenge(codeVerifier, CodeChallengeMethod.S256);
+        }
+
+        // Add resource parameter(s) to the authentication request (RFC 8707)
+        if (resource != null) {
+            List<URI> resourceUris = java.util.Arrays.stream(resource)
+                    .filter(r -> r != null && !r.trim().isEmpty())
+                    .map(URI::create)
+                    .collect(Collectors.toList());
+            if (!resourceUris.isEmpty()) {
+                authRequestBuilder.resources(resourceUris.toArray(new URI[0]));
+            }
         }
 
         List<String[]> parameters = conn.additionalAuthorizationParameters().stream()
