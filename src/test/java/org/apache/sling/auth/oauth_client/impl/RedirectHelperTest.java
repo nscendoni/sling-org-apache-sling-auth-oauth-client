@@ -151,7 +151,7 @@ class RedirectHelperTest {
         String[] audience = new String[] {"https://api.example.com"};
 
         RedirectTarget result = RedirectHelper.buildRedirectTarget(
-                new String[] {"/"}, URI.create("/callback"), conn, oAuthCookieValue, cryptoService, audience);
+                new String[] {"/"}, URI.create("/callback"), conn, oAuthCookieValue, cryptoService, audience, 300);
 
         assertNotNull(result);
         assertNotNull(result.uri());
@@ -170,7 +170,7 @@ class RedirectHelperTest {
         String[] audience = new String[] {"https://api1.example.com", "https://api2.example.com"};
 
         RedirectTarget result = RedirectHelper.buildRedirectTarget(
-                new String[] {"/"}, URI.create("/callback"), conn, oAuthCookieValue, cryptoService, audience);
+                new String[] {"/"}, URI.create("/callback"), conn, oAuthCookieValue, cryptoService, audience, 300);
 
         assertNotNull(result);
         assertNotNull(result.uri());
@@ -193,7 +193,7 @@ class RedirectHelperTest {
         String[] audience = new String[] {};
 
         RedirectTarget result = RedirectHelper.buildRedirectTarget(
-                new String[] {"/"}, URI.create("/callback"), conn, oAuthCookieValue, cryptoService, audience);
+                new String[] {"/"}, URI.create("/callback"), conn, oAuthCookieValue, cryptoService, audience, 300);
 
         assertRedirectTargetHasNoResourceParameter(result);
     }
@@ -206,7 +206,7 @@ class RedirectHelperTest {
                 new OAuthCookieValue("perRequestKey", "connectionName", "/redirect", new Nonce("nonce"), null);
 
         RedirectTarget result = RedirectHelper.buildRedirectTarget(
-                new String[] {"/"}, URI.create("/callback"), conn, oAuthCookieValue, cryptoService, null);
+                new String[] {"/"}, URI.create("/callback"), conn, oAuthCookieValue, cryptoService, null, 300);
 
         assertRedirectTargetHasNoResourceParameter(result);
     }
@@ -221,7 +221,7 @@ class RedirectHelperTest {
         String[] audience = new String[] {"", "  ", "https://api.example.com", null};
 
         RedirectTarget result = RedirectHelper.buildRedirectTarget(
-                new String[] {"/"}, URI.create("/callback"), conn, oAuthCookieValue, cryptoService, audience);
+                new String[] {"/"}, URI.create("/callback"), conn, oAuthCookieValue, cryptoService, audience, 300);
 
         assertNotNull(result);
         assertNotNull(result.uri());
@@ -232,6 +232,23 @@ class RedirectHelperTest {
         // Count occurrences of "resource=" - should be exactly 1
         int count = uriString.split("resource=", -1).length - 1;
         assertEquals(1, count, "Expected exactly one resource parameter but found " + count);
+    }
+
+    @Test
+    void testBuildRedirectTargetUsesConfiguredCookieMaxAge() {
+        ResolvedConnection conn = createMockResolvedConnection();
+        CryptoService cryptoService = new StubCryptoService();
+        OAuthCookieValue oAuthCookieValue =
+                new OAuthCookieValue("perRequestKey", "connectionName", "/redirect", new Nonce("nonce"), null);
+
+        int customMaxAge = 600;
+        RedirectTarget result = RedirectHelper.buildRedirectTarget(
+                new String[] {"/"}, URI.create("/callback"), conn, oAuthCookieValue, cryptoService, null, customMaxAge);
+
+        assertNotNull(result);
+        assertNotNull(result.cookie());
+        assertEquals(OAuthCookieValue.COOKIE_NAME_REQUEST_KEY, result.cookie().getName());
+        assertEquals(customMaxAge, result.cookie().getMaxAge());
     }
 
     private ResolvedConnection createMockResolvedConnection() {
