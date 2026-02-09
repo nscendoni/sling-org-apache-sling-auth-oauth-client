@@ -33,6 +33,8 @@ import static org.mockito.Mockito.when;
 
 class RedirectHelperTest {
 
+    final int COOKIE_EXPIRE_SECONDS = 300;
+
     @Test
     void testFindLongestPathMatchingWithValidPaths() {
         String[] paths = {"/a/b/c", "/a/b", "/a"};
@@ -151,7 +153,7 @@ class RedirectHelperTest {
         String[] audience = new String[] {"https://api.example.com"};
 
         RedirectTarget result = RedirectHelper.buildRedirectTarget(
-                new String[] {"/"}, URI.create("/callback"), conn, oAuthCookieValue, cryptoService, audience, 300);
+                new String[] {"/"}, URI.create("/callback"), conn, oAuthCookieValue, cryptoService, audience, COOKIE_EXPIRE_SECONDS);
 
         assertNotNull(result);
         assertNotNull(result.uri());
@@ -170,7 +172,7 @@ class RedirectHelperTest {
         String[] audience = new String[] {"https://api1.example.com", "https://api2.example.com"};
 
         RedirectTarget result = RedirectHelper.buildRedirectTarget(
-                new String[] {"/"}, URI.create("/callback"), conn, oAuthCookieValue, cryptoService, audience, 300);
+                new String[] {"/"}, URI.create("/callback"), conn, oAuthCookieValue, cryptoService, audience, COOKIE_EXPIRE_SECONDS);
 
         assertNotNull(result);
         assertNotNull(result.uri());
@@ -193,7 +195,7 @@ class RedirectHelperTest {
         String[] audience = new String[] {};
 
         RedirectTarget result = RedirectHelper.buildRedirectTarget(
-                new String[] {"/"}, URI.create("/callback"), conn, oAuthCookieValue, cryptoService, audience, 300);
+                new String[] {"/"}, URI.create("/callback"), conn, oAuthCookieValue, cryptoService, audience, COOKIE_EXPIRE_SECONDS);
 
         assertRedirectTargetHasNoResourceParameter(result);
     }
@@ -206,7 +208,7 @@ class RedirectHelperTest {
                 new OAuthCookieValue("perRequestKey", "connectionName", "/redirect", new Nonce("nonce"), null);
 
         RedirectTarget result = RedirectHelper.buildRedirectTarget(
-                new String[] {"/"}, URI.create("/callback"), conn, oAuthCookieValue, cryptoService, null, 300);
+                new String[] {"/"}, URI.create("/callback"), conn, oAuthCookieValue, cryptoService, null, COOKIE_EXPIRE_SECONDS);
 
         assertRedirectTargetHasNoResourceParameter(result);
     }
@@ -221,7 +223,7 @@ class RedirectHelperTest {
         String[] audience = new String[] {"", "  ", "https://api.example.com", null};
 
         RedirectTarget result = RedirectHelper.buildRedirectTarget(
-                new String[] {"/"}, URI.create("/callback"), conn, oAuthCookieValue, cryptoService, audience, 300);
+                new String[] {"/"}, URI.create("/callback"), conn, oAuthCookieValue, cryptoService, audience, COOKIE_EXPIRE_SECONDS);
 
         assertNotNull(result);
         assertNotNull(result.uri());
