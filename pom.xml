@@ -43,6 +43,7 @@
         <sling.java.version>11</sling.java.version>
         <project.build.outputTimestamp>1763123569</project.build.outputTimestamp>
         <it.startTimeoutSeconds>60</it.startTimeoutSeconds>
+        <it.keycloak.enabled>true</it.keycloak.enabled>
     </properties>
     <dependencies>
         <dependency>
@@ -283,6 +284,7 @@
                 <configuration>
                     <systemPropertyVariables>
                         <sling.http.port>${http.port}</sling.http.port>
+                        <it.keycloak.enabled>${it.keycloak.enabled}</it.keycloak.enabled>
                     </systemPropertyVariables>
                 </configuration>
                 <executions>

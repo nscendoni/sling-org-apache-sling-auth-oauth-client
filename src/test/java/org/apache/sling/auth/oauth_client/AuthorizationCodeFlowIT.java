@@ -86,6 +86,7 @@ class AuthorizationCodeFlowIT {
 
     private static final Duration DEFAULT_AWAIT_DURATION = Duration.ofSeconds(10);
     private static final Duration DEFAULT_AWAIT_INTERVAL = Duration.ofMillis(100);
+    private static final String KEYCLOAK_ENABLED_PROPERTY = "it.keycloak.enabled";
 
     private static final String IV_GENERATOR_REGISTRAR_PID = JasyptRandomIvGeneratorRegistrar.class.getName();
     private static final String PASSWORD_PROVIDER_PID = EnvironmentVariablePasswordProvider.class.getName();
@@ -123,21 +124,21 @@ class AuthorizationCodeFlowIT {
     @BeforeEach
     @SuppressWarnings("resource")
     void initKeycloak() {
+        Assumptions.assumeTrue(
+                Boolean.parseBoolean(System.getProperty(KEYCLOAK_ENABLED_PROPERTY, "true")),
+                "Skipping integration test: Keycloak integration tests are disabled (-D"
+                        + KEYCLOAK_ENABLED_PROPERTY
+                        + "=false)");
+
         // support using an existing Keycloak instance by setting
         // KEYCLOAK_URL=http://localhost:24098/
         // this is most usually done in an IDE, with both Keycloak and Sling running
         String existingKeyCloakUrl = System.getenv("KEYCLOAK_URL");
         if (existingKeyCloakUrl == null) {
-            try {
-                keycloak = new KeycloakContainer("quay.io/keycloak/keycloak:26.4")
-                        .withRealmImportFile("keycloak-import/sling.json");
-                keycloak.start();
-                keycloakPort = keycloak.getHttpPort();
-            } catch (RuntimeException e) {
-                Assumptions.assumeTrue(
-                        false,
-                        "Skipping integration test: Keycloak test container is unavailable (" + e.getMessage() + ")");
-            }
+            keycloak = new KeycloakContainer("quay.io/keycloak/keycloak:26.4")
+                    .withRealmImportFile("keycloak-import/sling.json");
+            keycloak.start();
+            keycloakPort = keycloak.getHttpPort();
         } else {
             keycloakPort = URI.create(existingKeyCloakUrl).getPort();
         }
