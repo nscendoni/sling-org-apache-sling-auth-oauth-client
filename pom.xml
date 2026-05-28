@@ -22,7 +22,7 @@
     <parent>
         <groupId>org.apache.sling</groupId>
         <artifactId>sling-bundle-parent</artifactId>
-        <version>62</version>
+        <version>66</version>
         <relativePath />
     </parent>
 
@@ -43,6 +43,7 @@
         <sling.java.version>11</sling.java.version>
         <project.build.outputTimestamp>1763123569</project.build.outputTimestamp>
         <it.startTimeoutSeconds>60</it.startTimeoutSeconds>
+        <it.keycloak.enabled>true</it.keycloak.enabled>
     </properties>
     <dependencies>
         <dependency>
@@ -78,6 +79,7 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
+            <version>1.7.36</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -140,6 +142,7 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
+            <version>1.7.36</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -283,6 +286,7 @@
                 <configuration>
                     <systemPropertyVariables>
                         <sling.http.port>${http.port}</sling.http.port>
+                        <it.keycloak.enabled>${it.keycloak.enabled}</it.keycloak.enabled>
                     </systemPropertyVariables>
                 </configuration>
                 <executions>

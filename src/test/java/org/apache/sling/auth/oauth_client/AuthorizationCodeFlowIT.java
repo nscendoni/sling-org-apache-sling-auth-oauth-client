@@ -70,6 +70,7 @@ import org.apache.sling.testing.clients.SlingClient;
 import org.apache.sling.testing.clients.SlingHttpResponse;
 import org.apache.sling.testing.clients.osgi.OsgiConsoleClient;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -85,6 +86,7 @@ class AuthorizationCodeFlowIT {
 
     private static final Duration DEFAULT_AWAIT_DURATION = Duration.ofSeconds(10);
     private static final Duration DEFAULT_AWAIT_INTERVAL = Duration.ofMillis(100);
+    private static final String KEYCLOAK_ENABLED_PROPERTY = "it.keycloak.enabled";
 
     private static final String IV_GENERATOR_REGISTRAR_PID = JasyptRandomIvGeneratorRegistrar.class.getName();
     private static final String PASSWORD_PROVIDER_PID = EnvironmentVariablePasswordProvider.class.getName();
@@ -122,6 +124,12 @@ class AuthorizationCodeFlowIT {
     @BeforeEach
     @SuppressWarnings("resource")
     void initKeycloak() {
+        Assumptions.assumeTrue(
+                Boolean.parseBoolean(System.getProperty(KEYCLOAK_ENABLED_PROPERTY, "true")),
+                "Skipping integration test: Keycloak integration tests are disabled (-D"
+                        + KEYCLOAK_ENABLED_PROPERTY
+                        + "=false)");
+
         // support using an existing Keycloak instance by setting
         // KEYCLOAK_URL=http://localhost:24098/
         // this is most usually done in an IDE, with both Keycloak and Sling running
@@ -163,6 +171,7 @@ class AuthorizationCodeFlowIT {
 
     @AfterEach
     void cleanupOsgiConfigs() throws ClientException {
+        if (sling == null) return;
 
         // the Sling testing clients do not offer a way of listing configurations, as assigned PIDs
         // are not predictable. So instead of running deleting test configs when the test starts
@@ -173,6 +182,7 @@ class AuthorizationCodeFlowIT {
 
     @AfterEach
     void uninstallBundle() throws ClientException {
+        if (sling == null) return;
         supportBundle.uninstall(sling.adaptTo(OsgiConsoleClient.class));
     }
 
