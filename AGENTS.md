@@ -95,3 +95,10 @@ Makefile                 # Developer convenience targets (keycloak, sling config
 - **`org.apache.sling.jcr.resource` is compile-scope** — it is embedded in the bundle. Changes to that dependency version affect the bundle size and content.
 - **`InMemoryOAuthTokenStore` is not cluster-safe** — use JCR or Redis stores in any multi-node setup.
 - **Spotless index** — `target/spotless-index` is generated; if the build fails with a Spotless error, run `mvn spotless:apply` rather than editing format by hand.
+
+# Security
+
+<!-- sling-security-default:start -->
+The threat model for this project is https://github.com/apache/sling/blob/master/docs/threat-model.md .
+<!-- sling-security-default:end -->
+
