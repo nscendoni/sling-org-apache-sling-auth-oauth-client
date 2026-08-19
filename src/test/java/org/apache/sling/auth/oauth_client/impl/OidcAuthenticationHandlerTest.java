@@ -464,6 +464,42 @@ class OidcAuthenticationHandlerTest {
     }
 
     @Test
+    void extractCredentials_WithJwkSetHttpSizeLimitTooSmall_FailsToRetrieveJwkSet() throws JOSEException {
+        // A very small JWK set size limit must cause the JWK set retrieval to fail during token validation.
+        config = createConfig(Map.of("userInfoEnabled", true, "jwkSetHttpSizeLimit", 10));
+
+        RSAKey rsaJWK = new RSAKeyGenerator(2048).keyID("123").generate();
+        RuntimeException exception = assertThrows(
+                RuntimeException.class,
+                () -> extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(
+                        createIdToken(rsaJWK, "client-id", ISSUER),
+                        rsaJWK,
+                        "http://localhost:4567",
+                        createMockCookies(),
+                        false,
+                        true));
+        assertTrue(
+                exception.getMessage().contains("Exceeded configured input limit"),
+                "Expected an input-limit-exceeded error but got: " + exception.getMessage());
+    }
+
+    @Test
+    void extractCredentials_WithJwkSetHttpSizeLimitRaised_ValidatesToken() throws JOSEException {
+        // A raised JWK set size limit must still allow the JWK set to be retrieved and the token validated.
+        config = createConfig(Map.of("userInfoEnabled", true, "jwkSetHttpSizeLimit", 102400));
+
+        RSAKey rsaJWK = new RSAKeyGenerator(2048).keyID("123").generate();
+        AuthenticationInfo authInfo = extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(
+                createIdToken(rsaJWK, "client-id", ISSUER),
+                rsaJWK,
+                "http://localhost:4567",
+                createMockCookies(),
+                false,
+                true);
+        assertEquals("1234567890", authInfo.get("user.name"));
+    }
+
+    @Test
     void extractCredentials_WithMatchingState_WithValidConnection_WithValidIdToken_WithMissingUserInfo()
             throws JOSEException {
         RSAKey rsaJWK = new RSAKeyGenerator(2048).keyID("123").generate();

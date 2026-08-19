@@ -37,6 +37,7 @@ import java.util.stream.Stream;
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.proc.BadJOSEException;
+import com.nimbusds.jose.util.DefaultResourceRetriever;
 import com.nimbusds.oauth2.sdk.AuthorizationCode;
 import com.nimbusds.oauth2.sdk.AuthorizationCodeGrant;
 import com.nimbusds.oauth2.sdk.AuthorizationResponse;
@@ -93,6 +94,11 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     public static final String REDIRECT_ATTRIBUTE_NAME = "sling.redirect";
 
     private static final Logger logger = LoggerFactory.getLogger(OidcAuthenticationHandler.class);
+
+    // Nimbus RemoteJWKSet defaults, kept in sync so the default behaviour is unchanged.
+    static final int DEFAULT_JWK_SET_HTTP_SIZE_LIMIT = 50 * 1024;
+    static final int DEFAULT_JWK_SET_HTTP_CONNECT_TIMEOUT = 500;
+    static final int DEFAULT_JWK_SET_HTTP_READ_TIMEOUT = 500;
     private static final String AUTH_TYPE = "oidc";
 
     private final Map<String, ClientConnection> connections;
@@ -126,6 +132,12 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     private final CryptoService cryptoService;
 
     private final OidcLogoutHandler logoutHandler;
+
+    private final int jwkSetHttpSizeLimit;
+
+    private final int jwkSetHttpConnectTimeout;
+
+    private final int jwkSetHttpReadTimeout;
 
     @ObjectClassDefinition(
             name = "Apache Sling Oidc Authentication Handler",
@@ -196,6 +208,26 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                         + "logout is enabled and this is empty, the service will fail to activate with an exception.",
                 cardinality = Integer.MAX_VALUE)
         String[] logoutRedirectAllowedHosts() default {};
+
+        @AttributeDefinition(
+                name = "JWK set HTTP size limit (bytes)",
+                description = "Maximum size, in bytes, of the JWK set document fetched from the IdP's jwks_uri "
+                        + "when validating the ID token signature. Increase this if the IdP publishes a large key "
+                        + "set and token validation fails with 'Exceeded configured input limit'. Set to 0 for no "
+                        + "limit. Default is 51200 (50 KB), the Nimbus library default.")
+        int jwkSetHttpSizeLimit() default DEFAULT_JWK_SET_HTTP_SIZE_LIMIT;
+
+        @AttributeDefinition(
+                name = "JWK set HTTP connect timeout (ms)",
+                description = "Connect timeout, in milliseconds, for retrieving the JWK set from the IdP's "
+                        + "jwks_uri. Set to 0 for no timeout. Default is 500.")
+        int jwkSetHttpConnectTimeout() default DEFAULT_JWK_SET_HTTP_CONNECT_TIMEOUT;
+
+        @AttributeDefinition(
+                name = "JWK set HTTP read timeout (ms)",
+                description = "Read timeout, in milliseconds, for retrieving the JWK set from the IdP's "
+                        + "jwks_uri. Set to 0 for no timeout. Default is 500.")
+        int jwkSetHttpReadTimeout() default DEFAULT_JWK_SET_HTTP_READ_TIMEOUT;
     }
 
     @Activate
@@ -230,6 +262,9 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 : Set.of();
         this.cryptoService = cryptoService;
         this.logoutHandler = logoutHandler;
+        this.jwkSetHttpSizeLimit = config.jwkSetHttpSizeLimit();
+        this.jwkSetHttpConnectTimeout = config.jwkSetHttpConnectTimeout();
+        this.jwkSetHttpReadTimeout = config.jwkSetHttpReadTimeout();
 
         // Security validation: enforce allowed hosts when SP-initiated single logout is enabled
         if (this.enableSPInitiatedSingleLogout && this.logoutRedirectAllowedHosts.isEmpty()) {
@@ -511,7 +546,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
      * @param conn         The resolved OIDC connection.
      * @return The validated ID token claims set.
      */
-    private static @NotNull IDTokenClaimsSet validateIdToken(
+    private @NotNull IDTokenClaimsSet validateIdToken(
             @NotNull TokenResponse tokenResponse, @NotNull ResolvedOidcConnection conn, Nonce nonce) {
         Issuer issuer = new Issuer(conn.issuer());
         ClientID clientID = new ClientID(conn.clientId());
@@ -519,7 +554,10 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             JWSAlgorithm jwsAlg = JWSAlgorithm.RS256; // TODO: Read from config
             URL jwkSetURL = conn.jwkSetURL().toURL();
 
-            IDTokenValidator validator = new IDTokenValidator(issuer, clientID, jwsAlg, jwkSetURL);
+            // Use a resource retriever with configurable HTTP limits so large JWK sets can be fetched.
+            DefaultResourceRetriever resourceRetriever =
+                    new DefaultResourceRetriever(jwkSetHttpConnectTimeout, jwkSetHttpReadTimeout, jwkSetHttpSizeLimit);
+            IDTokenValidator validator = new IDTokenValidator(issuer, clientID, jwsAlg, jwkSetURL, resourceRetriever);
             return validator.validate(
                     tokenResponse.toSuccessResponse().getTokens().toOIDCTokens().getIDToken(), nonce);
         } catch (BadJOSEException | JOSEException | MalformedURLException e) {
