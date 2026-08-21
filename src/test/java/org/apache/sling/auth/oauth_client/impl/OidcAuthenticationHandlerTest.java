@@ -498,6 +498,37 @@ class OidcAuthenticationHandlerTest {
     }
 
     @Test
+    void activation_WithZeroJwkSetHttpSizeLimit_FailsFast() {
+        // 0 means "unlimited" to Nimbus and must be rejected at activation, not silently accepted.
+        config = createConfig(Map.of("jwkSetHttpSizeLimit", 0));
+        IllegalArgumentException exception =
+                assertThrows(IllegalArgumentException.class, this::createOidcAuthenticationHandler);
+        assertTrue(
+                exception.getMessage().contains("jwkSetHttpSizeLimit"),
+                "Expected a validation error naming the property but got: " + exception.getMessage());
+    }
+
+    @Test
+    void activation_WithNegativeJwkSetHttpConnectTimeout_FailsFast() {
+        config = createConfig(Map.of("jwkSetHttpConnectTimeout", -1));
+        IllegalArgumentException exception =
+                assertThrows(IllegalArgumentException.class, this::createOidcAuthenticationHandler);
+        assertTrue(
+                exception.getMessage().contains("jwkSetHttpConnectTimeout"),
+                "Expected a validation error naming the property but got: " + exception.getMessage());
+    }
+
+    @Test
+    void activation_WithJwkSetHttpReadTimeoutAboveMax_FailsFast() {
+        config = createConfig(Map.of("jwkSetHttpReadTimeout", 60_001));
+        IllegalArgumentException exception =
+                assertThrows(IllegalArgumentException.class, this::createOidcAuthenticationHandler);
+        assertTrue(
+                exception.getMessage().contains("jwkSetHttpReadTimeout"),
+                "Expected a validation error naming the property but got: " + exception.getMessage());
+    }
+
+    @Test
     void extractCredentials_WithMatchingState_WithValidConnection_WithValidIdToken_WithMissingUserInfo()
             throws JOSEException {
         RSAKey rsaJWK = new RSAKeyGenerator(2048).keyID("123").generate();
