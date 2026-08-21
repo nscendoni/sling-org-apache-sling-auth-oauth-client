@@ -471,10 +471,11 @@ class OidcAuthenticationHandlerTest {
         RSAKey rsaJWK = new RSAKeyGenerator(2048).keyID("123").generate();
         String idToken = createIdToken(rsaJWK, "client-id", ISSUER);
         Cookie[] cookies = createMockCookies();
+        String baseUrl = "http://localhost:" + idpServer.getAddress().getPort();
         RuntimeException exception = assertThrows(
                 RuntimeException.class,
                 () -> extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(
-                        idToken, rsaJWK, "http://localhost:4567", cookies, false, true));
+                        idToken, rsaJWK, baseUrl, cookies, false, true));
         assertTrue(
                 exception.getMessage().contains("Exceeded configured input limit"),
                 "Expected an input-limit-exceeded error but got: " + exception.getMessage());
@@ -489,7 +490,7 @@ class OidcAuthenticationHandlerTest {
         AuthenticationInfo authInfo = extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(
                 createIdToken(rsaJWK, "client-id", ISSUER),
                 rsaJWK,
-                "http://localhost:4567",
+                "http://localhost:" + idpServer.getAddress().getPort(),
                 createMockCookies(),
                 false,
                 true);
